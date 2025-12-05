@@ -51,6 +51,99 @@ Crucially, kishōtenketsu does not center **conflict** as the driver of narrativ
 
 This suggests that measuring emotional valence (the Reagan approach) may be measuring the *wrong observable* for non-Western narrative. A story optimized for kishōtenketsu might show a flat emotional arc but a highly structured *epistemic* arc.
 
+### 1.4 The Harmon Story Circle: A Western Generator
+
+Dan Harmon's Story Circle is an 8-step structure derived from Campbell's Hero's Journey, widely used in contemporary television writing (Community, Rick and Morty) and screenwriting pedagogy:
+
+```
+            1. COMFORT
+         (A character is in a zone of comfort)
+                 ↓
+            2. NEED
+         (But they want something)
+                 ↓
+            3. GO
+         (They enter an unfamiliar situation)
+                 ↓
+            4. SEARCH
+         (Adapt to it)
+                 ↓
+            5. FIND
+         (Get what they wanted)
+                 ↓
+            6. TAKE
+         (Pay a heavy price for it)
+                 ↓
+            7. RETURN
+         (Return to their familiar situation)
+                 ↓
+            8. CHANGE
+         (Having changed)
+```
+
+Geometrically, Harmon represents this as a circle bisected horizontally:
+
+```
+           ORDER (Known World)
+        ___1_________8___
+       /                  \
+      2                    7
+     |                      |
+     |    ←—— DESCENT ——→   |
+     |                      |
+      3                    6
+       \____4_____5______ /
+           CHAOS (Unknown)
+```
+
+The top half is the "ordinary world" (order, comfort, known). The bottom half is the "special world" (chaos, trial, unknown). Steps 1-4 are descent; steps 5-8 are ascent.
+
+**Key Insight**: The Harmon Circle maps directly onto Reagan's "man-in-a-hole" shape when projected through F_sentiment:
+
+| Harmon Steps | Position | F_sentiment |
+|--------------|----------|-------------|
+| 1-2 (Comfort/Need) | Top | High (stable) |
+| 3-4 (Go/Search) | Descending | Falling |
+| 5 (Find) | Bottom | Low point |
+| 6 (Take) | Ascending | Rising (with cost) |
+| 7-8 (Return/Change) | Top | High (transformed) |
+
+But the Circle is *more structured* than the arc—it prescribes *what happens at each position*, not just emotional valence. This suggests the Circle operates at a higher categorical level than the arc.
+
+### 1.5 Structural Relationships: Circle, Shapes, and Kishōtenketsu
+
+We now have three levels of narrative structure to relate:
+
+| Structure | Acts/Steps | Primary Driver | Cultural Origin |
+|-----------|------------|----------------|-----------------|
+| Reagan Shapes | Continuous curve | Emotional valence | Empirical (Western corpus) |
+| Harmon Circle | 8 discrete steps | Transformation via trial | Western (Campbell tradition) |
+| Kishōtenketsu | 4 acts | Epistemic reframing | East Asian |
+
+**Hypothesis 1**: The Harmon Circle is a *generator* for Reagan shapes.
+
+Different weightings and iterations of the Circle produce different shapes:
+- One full traversal → Man-in-a-hole
+- Truncated at step 5 → Tragedy (descent without return)
+- Starting at step 5 → Rags-to-riches (ascent only)
+- Two traversals (varied intensity) → Cinderella or Oedipus
+
+**Hypothesis 2**: Harmon and Kishōtenketsu are *non-isomorphic* structures.
+
+Despite both having cyclic/four-part aspects, they differ fundamentally:
+
+| Aspect | Harmon Circle | Kishōtenketsu |
+|--------|---------------|---------------|
+| Conflict | Central (steps 3-6 are struggle) | Optional/absent |
+| Transformation | Via ordeal | Via reframing |
+| Resolution | Return to order | Reconciliation of perspectives |
+| Emotional shape | Valley (descent-ascent) | Plateau with spike |
+| Protagonist | Active agent | Often passive observer |
+
+**Hypothesis 3**: There exists a *higher* structure from which both derive.
+
+Both Harmon and kishōtenketsu may be projections of a more abstract "transformation schema"—a universal pattern of *state change* that different cultures instantiate differently. Finding this schema is a goal of our research.
+
 ---
 
 ## 2. A Category-Theoretic Framework
@@ -69,7 +162,121 @@ Define a category **Narr** where:
 
 A complete story is a morphism `S: Initial → Final` in **Narr**.
 
-### 2.2 Observation Functors
+### 2.2 The Harmon Circle as a Diagram Category
+
+We can formalize the Harmon Circle as a **diagram** H: **8** → **Narr**, where **8** is the cyclic category with 8 objects and morphisms forming a cycle.
+
+Define the indexing category **Circle₈**:
+
+```
+Objects: {1, 2, 3, 4, 5, 6, 7, 8}
+
+Morphisms: 
+  step₁: 1 → 2  (Comfort → Need)
+  step₂: 2 → 3  (Need → Go)
+  step₃: 3 → 4  (Go → Search)
+  step₄: 4 → 5  (Search → Find)
+  step₅: 5 → 6  (Find → Take)
+  step₆: 6 → 7  (Take → Return)
+  step₇: 7 → 8  (Return → Change)
+  step₈: 8 → 1  (Change → Comfort')  [optional: for sequels/series]
+  
+Plus all compositions and identities.
+```
+
+A **Harmon story** is a functor H: **Circle₈** → **Narr** that:
+- Maps each object i to a narrative state H(i)
+- Maps each step morphism to a scene/beat transforming states
+- Respects composition: H(stepⱼ ∘ stepᵢ) = H(stepⱼ) ∘ H(stepᵢ)
+
+The **descent/ascent structure** is captured by a functor D: **Circle₈** → **2**, where **2** = {Order, Chaos}:
+
+```
+D(1) = D(2) = D(7) = D(8) = Order
+D(3) = D(4) = D(5) = D(6) = Chaos
+```
+
+The **threshold crossings** (steps 2→3 and 6→7) are the only morphisms where D changes value.
+
+### 2.3 Kishōtenketsu as a Diagram Category
+
+Similarly, kishōtenketsu defines a diagram K: **4** → **Narr**:
+
+```
+Objects: {Ki, Shō, Ten, Ketsu}
+
+Morphisms:
+  intro: Ki → Shō    (Introduction → Development)
+  twist: Shō → Ten   (Development → Twist)
+  resolve: Ten → Ketsu (Twist → Reconciliation)
+  
+Plus compositions and identities.
+```
+
+But unlike **Circle₈**, the kishōtenketsu diagram has a distinguished morphism: `twist` is marked as the **epistemic peak**. We can formalize this with a functor E: **4** → **ℝ** measuring epistemic intensity:
+
+```
+E(Ki) = 0     (baseline)
+E(Shō) = 0.3  (building understanding)
+E(Ten) = 1.0  (maximum reframing)
+E(Ketsu) = 0.5 (settled new understanding)
+```
+
+The shape is *not* a valley but a **ramp with spike**:
+
+```
+E(t)
+  1.0 │         ╱╲
+      │        ╱  ╲
+  0.5 │       ╱    ╲___
+  0.3 │    __╱
+    0 │___╱
+      └─────────────────
+        Ki  Shō  Ten  Ketsu
+```
+
+### 2.4 Relating Harmon and Kishōtenketsu via Natural Transformation
+
+Can we relate Harmon and kishōtenketsu structurally? 
+
+Define a **coarsening functor** C: **Circle₈** → **4** that collapses the eight steps into four acts:
+
+```
+C(1) = C(2) = Ki       (setup)
+C(3) = C(4) = Shō      (development)
+C(5) = C(6) = Ten      (crisis/twist)
+C(7) = C(8) = Ketsu    (resolution)
+```
+
+This gives us a commutative triangle:
+
+```
+              Circle₈
+               / |
+              /  |
+           H /   | C
+            /    |
+           ↓     ↓
+         Narr ←── 4
+              K
+```
+
+The question: Does H factor through K? That is, is there a natural transformation η: H ⇒ K ∘ C?
+
+**Answer**: Not in general. The Harmon Circle encodes *more* structure than kishōtenketsu:
+
+1. **Conflict requirement**: H(3→4→5→6) must involve struggle; K has no such requirement
+2. **Agent requirement**: H requires protagonist *action*; K allows passive observation
+3. **Return structure**: H(7→8) is about *returning changed*; K(Ketsu) is about *reconciling perspectives*
+
+However, we can define a **forgetful functor** U: **Harmon-Stories** → **Kish-Stories** that:
+- Forgets conflict structure
+- Forgets agent/patient distinctions  
+- Maps return→change to reconciliation
+
+This functor has a **left adjoint** (free Harmon structure on a kishōtenketsu skeleton), which explains why kishōtenketsu stories can be "adapted" to Western structure by adding conflict—but something is lost in translation.
+
+### 2.5 Observation Functors
 
 The key insight: *We cannot observe* **Narr** *directly*. We only have access to its image under various **observation functors**.
 
@@ -119,20 +326,21 @@ Maps to positions in a semantic embedding space.
 F_thematic(state) = centroid(embeddings(key_concepts_in_state))
 ```
 
-### 2.3 The Multi-Functor Hypothesis
+### 2.6 The Multi-Functor Hypothesis
 
 **Claim**: Different narrative traditions optimize different functors.
 
 | Tradition | Primary Functor | Secondary | Structure |
 |-----------|-----------------|-----------|-----------|
 | Western (conflict-driven) | F_sentiment | F_arousal | Three-act |
+| Harmon Circle (TV/film) | F_sentiment | F_social | Eight-step cycle |
 | Kishōtenketsu | F_epistemic | F_thematic | Four-act |
 | Telenovela | F_social | F_sentiment | Serial |
 | Slice-of-life | F_thematic | — | Episodic |
 
 The "six shapes" are the archetypal forms in Im(F_sentiment). But Im(F_epistemic) may have *different* archetypal forms—perhaps corresponding to kishōtenketsu's structure.
 
-### 2.4 Natural Transformations Between Functors
+### 2.7 Natural Transformations Between Functors
 
 Given two functors F, G: **Narr** → **Trajectory**, a natural transformation η: F ⇒ G consists of morphisms η_S: F(S) → G(S) for each story S, such that the appropriate diagrams commute.
 
@@ -143,7 +351,7 @@ Given two functors F, G: **Narr** → **Trajectory**, a natural transformation �
 
 These are *anti-correlated*. The natural transformation between them captures the novella's central irony: dying is the path to truly living.
 
-### 2.5 Stories as Cones and Limits
+### 2.8 Stories as Cones and Limits
 
 For complex narratives with multiple threads (e.g., War and Peace), model the story as a **diagram** D: J → **Narr** where J is an indexing category (characters, plotlines).
 
@@ -314,6 +522,25 @@ Does editorial gatekeeping select for specific shapes?
 
 **Hypothesis**: Published fiction shows less variance, fewer "non-standard" shapes.
 
+#### Q6: Harmon Circle Detection and Decomposition
+
+Can we detect Harmon Circle structure in narratives, and does it predict shape classification?
+
+**Method**: 
+1. Train a classifier to identify 8-step structure in stories
+2. Compute "Harmon completeness score" (how many steps present, in order)
+3. Correlate with Reagan shape classification
+
+**Hypothesis**: Stories with high Harmon completeness will cluster as "man-in-a-hole" under F_sentiment. Stories with partial Harmon structure will show predictable shape variants (truncated = tragedy, inverted = rags-to-riches).
+
+#### Q7: Cross-Structural Adaptation
+
+When kishōtenketsu stories are adapted for Western audiences, what transformations occur?
+
+**Method**: Compare original Japanese/Korean works with their Western adaptations (remakes, translations, localizations).
+
+**Hypothesis**: Adaptations will show "Harmonification"—insertion of conflict beats, agent transformation, and return structure—visible as changes in functor trajectories.
+
 ---
 
 ## 4. Technical Implementation
@@ -385,7 +612,192 @@ class ThematicFunctor:
         return distances
 ```
 
-### 4.2 Shape Clustering
+### 4.2 Harmon Circle Detection
+
+```python
+from dataclasses import dataclass
+from typing import List, Tuple
+import numpy as np
+
+@dataclass
+class HarmonStep:
+    """Represents one step of the Harmon Circle."""
+    name: str
+    keywords: List[str]
+    position: str  # 'order' or 'chaos'
+    sentiment_expected: str  # 'high', 'falling', 'low', 'rising'
+
+HARMON_STEPS = [
+    HarmonStep("comfort", ["home", "routine", "normal", "everyday"], "order", "high"),
+    HarmonStep("need", ["want", "desire", "lack", "need", "problem"], "order", "high"),
+    HarmonStep("go", ["leave", "enter", "cross", "journey", "venture"], "chaos", "falling"),
+    HarmonStep("search", ["struggle", "try", "fail", "adapt", "learn"], "chaos", "falling"),
+    HarmonStep("find", ["discover", "achieve", "obtain", "reach", "find"], "chaos", "low"),
+    HarmonStep("take", ["cost", "price", "sacrifice", "lose", "pay"], "chaos", "rising"),
+    HarmonStep("return", ["back", "return", "home", "escape", "leave"], "order", "rising"),
+    HarmonStep("change", ["different", "changed", "new", "transform", "grow"], "order", "high"),
+]
+
+class HarmonDetector:
+    def __init__(self, embedding_model):
+        self.model = embedding_model
+        self.step_embeddings = self._compute_step_embeddings()
+    
+    def _compute_step_embeddings(self) -> np.ndarray:
+        """Create embedding anchors for each Harmon step."""
+        step_texts = [" ".join(step.keywords) for step in HARMON_STEPS]
+        return self.model.encode(step_texts)
+    
+    def detect_steps(self, windows: List[str]) -> List[Tuple[int, float]]:
+        """
+        For each text window, identify closest Harmon step.
+        Returns list of (step_index, confidence) tuples.
+        """
+        window_embeddings = self.model.encode(windows)
+        results = []
+        for emb in window_embeddings:
+            similarities = np.dot(self.step_embeddings, emb)
+            best_step = np.argmax(similarities)
+            confidence = similarities[best_step]
+            results.append((best_step, confidence))
+        return results
+    
+    def compute_harmon_score(self, windows: List[str]) -> dict:
+        """
+        Compute how well a narrative follows Harmon structure.
+        """
+        detections = self.detect_steps(windows)
+        steps_detected = [d[0] for d in detections]
+        
+        # Check for sequential ordering
+        order_score = self._compute_order_score(steps_detected)
+        
+        # Check for completeness (all 8 steps present)
+        unique_steps = set(steps_detected)
+        completeness = len(unique_steps) / 8.0
+        
+        # Check for proper position (order vs chaos)
+        position_score = self._compute_position_score(steps_detected, len(windows))
+        
+        return {
+            'order_score': order_score,
+            'completeness': completeness,
+            'position_score': position_score,
+            'harmon_total': (order_score + completeness + position_score) / 3,
+            'step_sequence': steps_detected
+        }
+    
+    def _compute_order_score(self, steps: List[int]) -> float:
+        """Measure how sequential the step detections are."""
+        if len(steps) < 2:
+            return 0.0
+        correct_transitions = 0
+        for i in range(len(steps) - 1):
+            if steps[i+1] == (steps[i] + 1) % 8 or steps[i+1] == steps[i]:
+                correct_transitions += 1
+        return correct_transitions / (len(steps) - 1)
+    
+    def _compute_position_score(self, steps: List[int], total_windows: int) -> float:
+        """Check if order/chaos steps appear in correct halves."""
+        midpoint = total_windows // 2
+        correct = 0
+        for i, step in enumerate(steps):
+            expected_position = HARMON_STEPS[step].position
+            actual_position = "order" if (i < midpoint * 0.3 or i > midpoint * 1.7) else "chaos"
+            if expected_position == actual_position:
+                correct += 1
+        return correct / len(steps) if steps else 0.0
+
+
+class KishotenketsuDetector:
+    """Detect four-act kishōtenketsu structure."""
+    
+    def __init__(self, epistemic_functor):
+        self.F_epistemic = epistemic_functor
+    
+    def compute_score(self, windows: List[str]) -> dict:
+        """
+        Detect kishōtenketsu structure via epistemic arc analysis.
+        """
+        # Compute epistemic trajectory (surprisal over narrative time)
+        trajectory = self.F_epistemic(windows)
+        n = len(trajectory)
+        
+        # Kishōtenketsu predicts: flat-ish for Ki/Shō, spike at Ten (~75%), settle at Ketsu
+        # Divide into four quarters
+        q1 = trajectory[:n//4]           # Ki
+        q2 = trajectory[n//4:n//2]       # Shō  
+        q3 = trajectory[n//2:3*n//4]     # Ten
+        q4 = trajectory[3*n//4:]         # Ketsu
+        
+        # Check for expected pattern
+        ki_sho_flat = np.std(np.concatenate([q1, q2])) < np.std(trajectory) * 0.8
+        ten_spike = np.max(q3) > np.mean(np.concatenate([q1, q2])) + np.std(trajectory)
+        ketsu_settle = np.mean(q4) < np.max(q3) and np.mean(q4) > np.mean(q1)
+        
+        # Find the exact position of the "ten" (twist)
+        ten_position = (np.argmax(trajectory) / n) if len(trajectory) > 0 else 0
+        ten_in_expected_range = 0.5 < ten_position < 0.85
+        
+        # Compute overall score
+        scores = [ki_sho_flat, ten_spike, ketsu_settle, ten_in_expected_range]
+        kish_total = sum(scores) / len(scores)
+        
+        return {
+            'ki_sho_flat': ki_sho_flat,
+            'ten_spike': ten_spike,
+            'ten_position': ten_position,
+            'ketsu_settle': ketsu_settle,
+            'kish_total': kish_total,
+            'trajectory': trajectory
+        }
+
+
+class StructuralComparator:
+    """Compare Harmon and kishōtenketsu structure in narratives."""
+    
+    def __init__(self, embedding_model, epistemic_functor):
+        self.harmon = HarmonDetector(embedding_model)
+        self.kish = KishotenketsuDetector(epistemic_functor)
+    
+    def analyze(self, windows: List[str]) -> dict:
+        """Full structural analysis."""
+        h_result = self.harmon.compute_harmon_score(windows)
+        k_result = self.kish.compute_score(windows)
+        
+        # Compute H-K spectrum position
+        h_score = h_result['harmon_total']
+        k_score = k_result['kish_total']
+        
+        # Position: -1 (pure Harmon) to +1 (pure kishōtenketsu)
+        if h_score + k_score > 0:
+            hk_position = (k_score - h_score) / (h_score + k_score)
+        else:
+            hk_position = 0.0
+        
+        return {
+            'harmon': h_result,
+            'kishotenketsu': k_result,
+            'hk_spectrum_position': hk_position,
+            'structure_type': self._classify_structure(h_score, k_score, hk_position)
+        }
+    
+    def _classify_structure(self, h: float, k: float, pos: float) -> str:
+        if h > 0.7 and k < 0.3:
+            return "harmon_dominant"
+        elif k > 0.7 and h < 0.3:
+            return "kishotenketsu_dominant"
+        elif h > 0.5 and k > 0.5:
+            return "hybrid_both"
+        elif pos > 0.3:
+            return "kishotenketsu_leaning"
+        elif pos < -0.3:
+            return "harmon_leaning"
+        else:
+            return "ambiguous"
+```
+
+### 4.3 Shape Clustering
 
 ```python
 from scipy.cluster.hierarchy import linkage, fcluster
@@ -415,7 +827,7 @@ def cluster_trajectories(trajectories: List[np.ndarray], n_clusters: int) -> np.
     return labels
 ```
 
-### 4.3 Cross-Cultural Transfer Test
+### 4.4 Cross-Cultural Transfer Test
 
 ```python
 from sklearn.metrics import adjusted_rand_score, classification_report
@@ -557,6 +969,12 @@ Propp, V. (1968). *Morphology of the Folktale*. University of Texas Press.
 
 Campbell, J. (1949). *The Hero with a Thousand Faces*. Pantheon Books.
 
+Harmon, D. (2009). Story Structure 101: Super Basic Shit. Channel 101 Wiki.
+
+Harmon, D. (2011). Story Structure 104: The Juicy Details. Channel 101 Wiki.
+
+Vogler, C. (2007). *The Writer's Journey: Mythic Structure for Writers* (3rd ed.). Michael Wiese Productions.
+
 Jockers, M. L. (2015). Syuzhet: Extract Sentiment and Plot Arcs from Text. R package.
 
 Kim, Y. M. (2017). Worldwide Story Structures. Blog post.
@@ -564,6 +982,12 @@ Kim, Y. M. (2017). Worldwide Story Structures. Blog post.
 Hayashida, K. (2011). Mario Level Design via Kishōtenketsu. GDC Presentation.
 
 Mac Lane, S. (1978). *Categories for the Working Mathematician*. Springer.
+
+Fong, B., & Spivak, D. I. (2019). *An Invitation to Applied Category Theory: Seven Sketches in Compositionality*. Cambridge University Press.
+
+Bakhtin, M. M. (1981). *The Dialogic Imagination*. University of Texas Press.
+
+Moretti, F. (2005). *Graphs, Maps, Trees: Abstract Models for a Literary History*. Verso.
 
 ---
 
@@ -645,9 +1069,162 @@ lim(F_physical) = lim(F_spiritual) = point of transcendence
 
 This is a **categorical reconciliation of opposites**—the novel constructs a narrative space where physical death and spiritual birth are the *same morphism* viewed through different projections.
 
+### A.4 Tolstoy on the H-K Spectrum
+
+Interestingly, Tolstoy's works resist clean classification on either the Harmon or kishōtenketsu model:
+
+**Anna Karenina: Dual Structure**
+
+| Thread | Harmon Score (predicted) | Kishōtenketsu Score | Notes |
+|--------|--------------------------|---------------------|-------|
+| Anna | 0.6 (partial) | 0.3 | Steps 1-6 complete, 7-8 inverted (no return/change, only destruction) |
+| Levin | 0.4 (weak) | 0.7 | Minimal conflict; epistemic arc dominates; "ten" = peasant's words |
+
+The novel as a whole is **structurally hybrid**: Anna's thread provides Harmon-style conflict and descent, while Levin's thread provides kishōtenketsu-style epistemic transformation. The reader experiences both simultaneously.
+
+**War and Peace: Beyond Both Models**
+
+War and Peace exceeds both structures because:
+
+1. **Multiple simultaneous circles**: Pierre, Andrei, Natasha each traverse partial Harmon circles at different phases
+2. **Historical "ten"**: The 1812 invasion functions as kishōtenketsu's twist—it reframes everything
+3. **Philosophical ketsu**: Tolstoy's epilogue essays are explicit reconciliation/synthesis
+
+Predicted structural scores:
+- Harmon (any single thread): ~0.5 (incomplete circles)
+- Kishōtenketsu (any single thread): ~0.4 (twist present but resolution unclear)
+- **Combined/colimit structure**: Neither model captures adequately
+
+This suggests Tolstoy intuitively discovered a **higher structure** that subsumes both Western and Eastern models—a polyphonic narrative architecture that our categorical framework can begin to formalize as a diagram in **Narr** rather than a single morphism.
+
+**The Death of Ivan Ilyich: Anti-Harmon**
+
+| Harmon Step | Present? | Notes |
+|-------------|----------|-------|
+| 1. Comfort | ✓ | Ivan's successful bourgeois life |
+| 2. Need | ✗ | Ivan has no want—he's satisfied |
+| 3. Go | ✗ | Ivan doesn't choose to enter chaos; it invades (illness) |
+| 4. Search | ✓ (inverted) | Ivan searches for cure, meaning—but passively |
+| 5. Find | ✓ | Ivan finds truth only at death |
+| 6. Take | ✗ | No sacrifice—death is imposed |
+| 7. Return | ✗ | No return possible |
+| 8. Change | ✓ | Transformation occurs, but too late for worldly return |
+
+Harmon score: ~0.35 (structure violated, not completed)
+Kishōtenketsu score: ~0.6 (epistemic spike at death, but no ketsu/reconciliation for characters)
+
+The novella is **anti-Harmon**: it systematically violates the expected structure to create its devastating effect. The reader expects return and change; Ivan gets only death. This makes it a critical test case for structural detection—a high-quality work that deliberately resists the dominant pattern.
+
 ---
 
-## Appendix B: Implementation Roadmap
+## Appendix B: Harmon Circle Case Studies
+
+### B.1 The Circle in Television: Community and Rick and Morty
+
+Dan Harmon developed his Story Circle explicitly for television writing. Each episode of *Community* was designed to traverse the full circle, making it an ideal test corpus.
+
+**Example: "Remedial Chaos Theory" (Community S3E04)**
+
+This episode creates seven alternate timelines from one moment (rolling a die to determine who gets pizza). Each timeline is a *partial* Harmon traversal:
+
+| Timeline | Steps Completed | Outcome |
+|----------|-----------------|---------|
+| Timeline 1 (Abed) | 1-2-3 only | Truncated (Abed removed) |
+| Timeline 2 (Shirley) | 1-8 compressed | Full but rushed |
+| Timeline 3 (Pierce) | 1-6 (death) | Tragedy variant |
+| Timeline 4 (Britta) | 1-5-skip-8 | Missing sacrifice |
+| Timeline 5 (Troy) | 1-8 full | "Prime" timeline |
+| Timeline 6 (Annie) | 1-6 repeated | Loop/trap |
+| Timeline 7 ("Darkest") | 1-4 only | Chaos without return |
+
+The episode is a **diagram of circles**—a functor from the timeline category to **Circle₈**. The "prime" timeline is distinguished by being the unique complete traversal.
+
+**Rick and Morty: Subverting the Circle**
+
+The show often *inverts* or *corrupts* the Harmon structure for nihilistic effect:
+
+- Rick frequently completes steps 1-6 but *refuses* step 7 (return) or 8 (change)
+- Episodes may start at step 5 (already in chaos) with no setup
+- "Change" is often ironic or undone by next episode (serial reset)
+
+This makes Rick and Morty a test case for **anti-Harmon** detection: Can our system identify deliberate structural violations?
+
+### B.2 Harmon Structure in Film: Comparative Analysis
+
+We can compare Harmon-adherent films with non-Harmon structures:
+
+**High Harmon Adherence** (predicted):
+- *The Matrix* (1999): Neo's journey maps cleanly to all 8 steps
+- *Finding Nemo* (2003): Marlin's transformation is textbook circle
+- *Get Out* (2017): Chris's descent and return with change
+
+**Low Harmon Adherence** (predicted):
+- *Spirited Away* (2001): Kishōtenketsu structure, minimal conflict drive
+- *Lost in Translation* (2003): No clear "take" or "return" beats
+- *Jeanne Dielman* (1975): Anti-narrative, steps deliberately absent
+
+**Hybrid/Complex**:
+- *Parasite* (2019): Kishōtenketsu "ten" (twist) mapped onto Western thriller beats
+- *Arrival* (2016): Circle is present but *non-linear* in presentation
+- *Memento* (2000): Circle traversed backwards
+
+### B.3 The Harmon-Kishōtenketsu Spectrum
+
+Rather than a binary, we can define a continuous **H-K spectrum**:
+
+```
+H ←————————————————————————————→ K
+
+Conflict-driven          Twist-driven
+Agent transformation     Perspective shift
+Return to order          Reconciliation of views
+Emotional valley         Epistemic spike
+```
+
+Every narrative has a position on this spectrum. Our detection system can compute:
+
+```python
+def compute_hk_position(story) -> float:
+    """
+    Returns value in [-1, 1].
+    -1 = pure Harmon, +1 = pure kishōtenketsu, 0 = hybrid
+    """
+    harmon_score = harmon_detector.compute_harmon_score(story)['harmon_total']
+    kish_score = kishōtenketsu_detector.compute_score(story)['kish_total']
+    
+    # Normalize and compute position
+    h_norm = 2 * harmon_score - 1  # Map [0,1] to [-1,1]
+    k_norm = 2 * kish_score - 1
+    
+    return (k_norm - h_norm) / 2  # Average positions
+```
+
+This allows us to:
+1. Map entire corpora on the H-K spectrum
+2. Track cultural drift over time
+3. Identify hybrid works that draw from both traditions
+4. Predict adaptation success (works near center may translate better)
+
+### B.4 Fan Fiction and Structural Mixing
+
+Fan fiction is particularly interesting because it often:
+- Takes source material from one tradition
+- Written by authors steeped in another tradition
+- Published without editorial gatekeeping
+
+**Hypothesis**: Anime/manga fanfic written by Western authors will show *structural code-switching*—alternating between Harmon and kishōtenketsu patterns, or attempting hybrid forms.
+
+**Test**: Compare:
+- Harry Potter fic (Western source, mixed authors)
+- Naruto fic (Japanese source, mixed authors)  
+- MCU fic (Western source, Western-dominated authors)
+- BTS fic (Korean source, global authors)
+
+We predict Naruto and BTS fic will show higher kishōtenketsu influence, but this may depend on author cultural background (detectable via username patterns, author notes, publication platform).
+
+---
+
+## Appendix C: Implementation Roadmap
 
 ### Phase 1: Infrastructure (Months 1-2)
 - Set up corpus ingestion pipelines
@@ -676,4 +1253,5 @@ This is a **categorical reconciliation of opposites**—the novel constructs a n
 
 ---
 
+*Document prepared for the Categorical Solutions Architect blog series.*
 *Author: [Ibrahim Cesar] | Date: [December 2025]*
