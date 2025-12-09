@@ -110,15 +110,87 @@ The top half is the "ordinary world" (order, comfort, known). The bottom half is
 
 But the Circle is *more structured* than the arc—it prescribes *what happens at each position*, not just emotional valence. This suggests the Circle operates at a higher categorical level than the arc.
 
-### 1.5 Structural Relationships: Circle, Shapes, and Kishōtenketsu
+### 1.5 Classical Western Structures
 
-We now have three levels of narrative structure to relate:
+Beyond the Harmon Circle, our analysis incorporates several foundational Western dramatic structures:
 
-| Structure | Acts/Steps | Primary Driver | Cultural Origin |
-|-----------|------------|----------------|-----------------|
-| Reagan Shapes | Continuous curve | Emotional valence | Empirical (Western corpus) |
-| Harmon Circle | 8 discrete steps | Transformation via trial | Western (Campbell tradition) |
-| Kishōtenketsu | 4 acts | Epistemic reframing | East Asian |
+#### Aristotelian Three-Act Structure
+
+The foundational Western dramatic form from Aristotle's *Poetics* (335 BCE):
+
+```
+Act I - PROTASIS (Setup)     ~25%    Introduction, inciting incident
+Act II - EPITASIS (Confrontation) ~50%    Rising action, complications
+Act III - CATASTROPHE (Resolution) ~25%    Climax, falling action, resolution
+```
+
+Key characteristics:
+- Unity of action (single through-line)
+- Clear beginning-middle-end with proportions ~1:2:1
+- Rising tension through Act II
+- Climax near Act III opening
+
+#### Freytag's Pyramid (1863)
+
+Gustav Freytag's five-act structure derived from classical and Shakespearean drama:
+
+```
+                    CLIMAX
+                      /\
+                     /  \
+                    /    \
+          RISING  /      \ FALLING
+          ACTION /        \ ACTION
+                /          \
+               /            \
+    EXPOSITION              DENOUEMENT
+```
+
+The five phases:
+1. **Exposition** (Einleitung): ~10-15% - Introduction of setting and characters
+2. **Rising Action** (Steigerung): ~25-30% - Complications and building tension
+3. **Climax** (Höhepunkt): ~5-10% - Turning point, maximum tension
+4. **Falling Action** (Fall): ~25-30% - Consequences unfold
+5. **Denouement** (Katastrophe): ~10-15% - Final resolution
+
+#### Campbell's Monomyth / Hero's Journey (1949)
+
+Joseph Campbell's 12-stage structure from *The Hero with a Thousand Faces*:
+
+```
+ACT I - DEPARTURE           ACT II - INITIATION         ACT III - RETURN
+1. Ordinary World           6. Tests, Allies, Enemies   11. Resurrection
+2. Call to Adventure        7. Approach to Inmost Cave  12. Return with Elixir
+3. Refusal of the Call      8. The Ordeal (NADIR)
+4. Meeting the Mentor       9. Reward
+5. Crossing Threshold       10. The Road Back
+```
+
+Geometric representation:
+```
+ORDINARY WORLD ─────────────────────────────── RETURN WITH ELIXIR
+      │                                               ↑
+      ↓ Call to Adventure                             │
+┌─────────────────────────────────────────────────────┤
+│                    SPECIAL WORLD                    │
+│   Tests ──→ Approach ──→ ORDEAL ──→ Reward ──→ Road Back
+└─────────────────────────────────────────────────────┘
+```
+
+The Harmon Story Circle is a simplified 8-step derivative of this structure.
+
+### 1.6 Structural Relationships: Comparing Narrative Frameworks
+
+We now have multiple narrative structures to relate:
+
+| Structure | Acts/Steps | Primary Driver | Cultural Origin | Shape |
+|-----------|------------|----------------|-----------------|-------|
+| Reagan Shapes | Continuous curve | Emotional valence | Empirical (Western) | Various |
+| Three-Act | 3 acts | Dramatic unity | Classical Greek | Rising arc |
+| Freytag's Pyramid | 5 phases | Tension dynamics | German classical | Triangle |
+| Hero's Journey | 12 stages | Transformation | Universal myth | Valley + peak |
+| Harmon Circle | 8 steps | Trial & return | Western TV/Film | Valley |
+| Kishōtenketsu | 4 acts | Epistemic reframing | East Asian | Plateau + spike |
 
 **Hypothesis 1**: The Harmon Circle is a *generator* for Reagan shapes.
 
@@ -236,7 +308,146 @@ E(t)
         Ki  Shō  Ten  Ketsu
 ```
 
-### 2.4 Relating Harmon and Kishōtenketsu via Natural Transformation
+### 2.4 Three-Act Structure as a Diagram Category
+
+The Aristotelian three-act structure defines the simplest non-trivial narrative diagram:
+
+Define the indexing category **3-Act**:
+
+```
+Objects: {I, II, III}
+
+Morphisms:
+  plot_point_1: I → II    (Setup → Confrontation)
+  plot_point_2: II → III  (Confrontation → Resolution)
+
+Plus compositions and identities.
+```
+
+A **three-act story** is a functor T: **3-Act** → **Narr** that:
+- Maps each act to a narrative segment T(i)
+- Maps plot points to major dramatic transitions
+- Respects the 1:2:1 proportional structure
+
+The **tension functor** τ: **3-Act** → **ℝ** captures dramatic intensity:
+
+```
+τ(I)   = 0.3  (baseline, setup)
+τ(II)  = 0.6  (rising, average over confrontation)
+τ(III) = 0.8  (peak at climax, then resolution)
+```
+
+### 2.5 Freytag's Pyramid as a Diagram Category
+
+Freytag's five-phase structure introduces **symmetry** as a formal constraint:
+
+Define the indexing category **Freytag-5**:
+
+```
+Objects: {Exp, Rise, Climax, Fall, Den}
+
+Morphisms:
+  excite: Exp → Rise      (Exposition → Rising Action)
+  peak: Rise → Climax     (Rising Action → Climax)
+  reverse: Climax → Fall  (Climax → Falling Action)
+  resolve: Fall → Den     (Falling Action → Denouement)
+
+Plus compositions and identities.
+```
+
+The **pyramid structure** is captured by a height functor h: **Freytag-5** → **ℝ**:
+
+```
+h(Exp)    = 0.2   (baseline)
+h(Rise)   = 0.5   (ascending)
+h(Climax) = 1.0   (peak)
+h(Fall)   = 0.5   (descending)
+h(Den)    = 0.2   (return to baseline)
+```
+
+The **symmetry constraint**: h(Rise) ≈ h(Fall) and h(Exp) ≈ h(Den).
+
+### 2.6 Hero's Journey as a Diagram Category
+
+Campbell's monomyth defines the most elaborate narrative diagram:
+
+Define the indexing category **Journey-12**:
+
+```
+Objects: {OrdWorld, Call, Refusal, Mentor, Threshold,
+          Tests, Approach, Ordeal, Reward, RoadBack,
+          Resurrection, Return}
+
+Morphisms: Sequential transitions between adjacent stages,
+           plus compositions and identities.
+```
+
+The **world functor** W: **Journey-12** → **2** where **2** = {Ordinary, Special}:
+
+```
+W(OrdWorld, Call, Refusal, Mentor) = Ordinary
+W(Threshold) = Liminal (threshold)
+W(Tests, Approach, Ordeal, Reward, RoadBack) = Special
+W(Resurrection) = Liminal (threshold)
+W(Return) = Ordinary (transformed)
+```
+
+The **ordeal functor** O: **Journey-12** → **ℝ** capturing crisis intensity:
+
+```
+O reaches minimum at Ordeal (the "belly of the whale")
+O reaches maximum at Resurrection (the final test)
+```
+
+**Relationship to Harmon Circle**: There exists a **refinement functor** R: **Journey-12** → **Circle₈**:
+
+```
+R(OrdWorld, Call) = Comfort
+R(Refusal, Mentor) = Need
+R(Threshold, Tests) = Go
+R(Approach) = Search
+R(Ordeal) = Find
+R(Reward) = Take
+R(RoadBack, Resurrection) = Return
+R(Return) = Change
+```
+
+This functor is an epimorphism (surjective), showing that the Harmon Circle is a **quotient** of the Hero's Journey.
+
+### 2.7 Relating All Western Structures via Natural Transformations
+
+We can now relate all Western narrative structures through a hierarchy of functors:
+
+```
+Journey-12 ──R──→ Circle₈ ──Q──→ 3-Act
+     │              │            │
+     │              │            │
+     ↓              ↓            ↓
+   Narr  ←─────── Narr ←────── Narr
+```
+
+Where:
+- R: Journey-12 → Circle₈ (refinement, quotient)
+- Q: Circle₈ → 3-Act (coarsening)
+
+**Q is defined as**:
+```
+Q(Comfort, Need) = I       (Setup)
+Q(Go, Search, Find, Take) = II  (Confrontation)
+Q(Return, Change) = III    (Resolution)
+```
+
+**Freytag's Pyramid** relates via a different coarsening that preserves symmetry:
+```
+F: Circle₈ → Freytag-5
+F(Comfort) = Exposition
+F(Need, Go) = Rising Action
+F(Search, Find) = Climax region
+F(Take, Return) = Falling Action
+F(Change) = Denouement
+```
+
+### 2.8 Relating Harmon and Kishōtenketsu via Natural Transformation
 
 Can we relate Harmon and kishōtenketsu structurally? 
 
@@ -277,7 +488,7 @@ However, we can define a **forgetful functor** U: **Harmon-Stories** → **Kish-
 
 This functor has a **left adjoint** (free Harmon structure on a kishōtenketsu skeleton), which explains why kishōtenketsu stories can be "adapted" to Western structure by adding conflict—but something is lost in translation.
 
-### 2.5 Observation Functors
+### 2.9 Observation Functors
 
 The key insight: *We cannot observe* **Narr** *directly*. We only have access to its image under various **observation functors**.
 
@@ -359,7 +570,7 @@ The Uniform Information Density (UID) hypothesis proposes that effective communi
 
 Recent work (Wilmot & Keller, 2020) formalized suspense as **uncertainty reduction**—a forward-looking measure of how unexpected the continuation is. This outperformed backward-looking surprise measures in predicting human suspense judgments.
 
-### 2.6 The Multi-Functor Hypothesis
+### 2.10 The Multi-Functor Hypothesis
 
 **Claim**: Different narrative traditions optimize different functors.
 
@@ -373,7 +584,7 @@ Recent work (Wilmot & Keller, 2020) formalized suspense as **uncertainty reducti
 
 The "six shapes" are the archetypal forms in Im(F_sentiment). But Im(F_epistemic) may have *different* archetypal forms—perhaps corresponding to kishōtenketsu's structure.
 
-### 2.7 Natural Transformations Between Functors
+### 2.11 Natural Transformations Between Functors
 
 Given two functors F, G: **Narr** → **Trajectory**, a natural transformation η: F ⇒ G consists of morphisms η_S: F(S) → G(S) for each story S, such that the appropriate diagrams commute.
 
@@ -384,7 +595,7 @@ Given two functors F, G: **Narr** → **Trajectory**, a natural transformation �
 
 These are *anti-correlated*. The natural transformation between them captures the novella's central irony: dying is the path to truly living.
 
-### 2.8 Stories as Cones and Limits
+### 2.12 Stories as Cones and Limits
 
 For complex narratives with multiple threads (e.g., War and Peace), model the story as a **diagram** D: J → **Narr** where J is an indexing category (characters, plotlines).
 
