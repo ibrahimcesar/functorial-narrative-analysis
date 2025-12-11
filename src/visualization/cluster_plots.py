@@ -16,7 +16,12 @@ from scipy.ndimage import gaussian_filter1d
 import click
 from rich.console import Console
 
+from .style import setup_style
+
 console = Console()
+
+# Apply project-wide styling (JetBrains Mono)
+setup_style()
 
 
 def plot_centroids(

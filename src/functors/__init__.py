@@ -12,6 +12,8 @@ Functors map narrative states to measurable trajectories:
 from .sentiment import SentimentFunctor
 from .arousal import ArousalFunctor, JapaneseArousalFunctor
 from .entropy import EntropyFunctor, JapaneseEntropyFunctor
+from .thematic import ThematicFunctor, ThematicCoherenceFunctor, JapaneseThematicFunctor
+from .epistemic import EpistemicFunctor, JapaneseEpistemicFunctor, EpistemicPatternDetector
 from .base import BaseFunctor
 
 __all__ = [
@@ -21,4 +23,10 @@ __all__ = [
     "JapaneseArousalFunctor",
     "EntropyFunctor",
     "JapaneseEntropyFunctor",
+    "ThematicFunctor",
+    "ThematicCoherenceFunctor",
+    "JapaneseThematicFunctor",
+    "EpistemicFunctor",
+    "JapaneseEpistemicFunctor",
+    "EpistemicPatternDetector",
 ]

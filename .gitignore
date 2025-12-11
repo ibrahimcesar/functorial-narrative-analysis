@@ -85,3 +85,4 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+.vscode/branch-timer.json

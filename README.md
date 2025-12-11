@@ -2058,5 +2058,4 @@ Different narrative traditions correspond to different **optimization functional
 
 ---
 
-*Document prepared for the Categorical Solutions Architect blog series.*
 *Author: [Ibrahim Cesar] | Date: [December 2025]*
