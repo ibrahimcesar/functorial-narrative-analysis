@@ -401,6 +401,107 @@ def pipeline(corpus: str, output: str, sample_size: int):
 
 
 @cli.command()
+@click.option('--language', '-l', default='en', help='Language code (en, de, fr, etc.)')
+@click.option('--n-books', '-n', default=100, help='Number of books to download')
+@click.option('--output', '-o', default='data/raw/gutenberg', help='Output directory')
+@click.option('--method', '-m', default='random',
+              type=click.Choice(['random', 'stratified']),
+              help='Sampling method')
+@click.option('--seed', '-s', default=42, help='Random seed')
+def corpus_gutenberg(language: str, n_books: int, output: str, method: str, seed: int):
+    """
+    Download fiction corpus from Project Gutenberg.
+
+    \b
+    Examples:
+        fna corpus-gutenberg                    # 100 random English fiction
+        fna corpus-gutenberg -n 500 -l en       # 500 English texts
+        fna corpus-gutenberg -m stratified      # Stratified by decade
+    """
+    from .corpus.gutenberg import GutenbergPipeline
+
+    pipeline = GutenbergPipeline()
+
+    # Load and filter
+    pipeline.load_catalog()
+    fiction = pipeline.filter_fiction(language=language)
+
+    # Sample
+    sample = pipeline.sample(fiction, n=n_books, method=method, seed=seed)
+    console.print(f"[cyan]Sampled {len(sample)} books[/cyan]")
+
+    # Download
+    successful = pipeline.download_texts(sample)
+
+    # Save
+    pipeline.save_corpus(successful, Path(output))
+
+    console.print(f"\n[bold green]Done! Downloaded {len(successful)} books to {output}[/bold green]")
+
+
+@cli.command()
+@click.option('--genre', '-g', multiple=True, type=int,
+              help='Genre codes (201=High Fantasy, 202=Low Fantasy, 301=Literature, 307=Comedy)')
+@click.option('--n-novels', '-n', default=50, help='Number of novels to download')
+@click.option('--output', '-o', default='data/raw/syosetu', help='Output directory')
+@click.option('--method', '-m', default='popularity',
+              type=click.Choice(['random', 'popularity', 'bookmarks']),
+              help='Sampling method')
+@click.option('--completed', is_flag=True, help='Only completed novels')
+@click.option('--seed', '-s', default=42, help='Random seed')
+def corpus_syosetu(genre: tuple, n_novels: int, output: str, method: str, completed: bool, seed: int):
+    """
+    Download Japanese web novel corpus from Syosetu (小説家になろう).
+
+    \b
+    Examples:
+        fna corpus-syosetu                          # 50 popular novels
+        fna corpus-syosetu -n 100 --completed       # 100 completed novels
+        fna corpus-syosetu -g 201 -g 301            # Fantasy + Literature
+
+    \b
+    Genre codes:
+        201 = High Fantasy (ハイファンタジー)
+        202 = Low Fantasy (ローファンタジー)
+        301 = Pure Literature (純文学)
+        302 = Human Drama (ヒューマンドラマ)
+        307 = Comedy (コメディー)
+    """
+    from .corpus.syosetu import SyosetuPipeline
+
+    pipeline = SyosetuPipeline()
+
+    # Default genres: diverse selection for kishōtenketsu analysis
+    if not genre:
+        genre = (201, 202, 301, 302, 307)
+
+    # Search across genres
+    novels = pipeline.search_by_genres(
+        list(genre),
+        per_genre=n_novels,
+        end_flag=1 if completed else None,
+    )
+
+    # Sample
+    sample = pipeline.sample(novels, n=n_novels, method=method, seed=seed)
+    console.print(f"[cyan]Sampled {len(sample)} novels[/cyan]")
+
+    # Show genre distribution
+    dist = pipeline.get_genre_distribution(sample)
+    console.print("\n[bold]Genre distribution:[/bold]")
+    for genre_name, count in list(dist.items())[:5]:
+        console.print(f"  {genre_name}: {count}")
+
+    # Download
+    successful = pipeline.download_texts(sample)
+
+    # Save
+    pipeline.save_corpus(successful, Path(output))
+
+    console.print(f"\n[bold green]Done! Downloaded {len(successful)} novels to {output}[/bold green]")
+
+
+@cli.command()
 def info():
     """
     Display information about available functors and detectors.

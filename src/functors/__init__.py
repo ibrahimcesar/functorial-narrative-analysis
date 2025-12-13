@@ -14,11 +14,14 @@ from .arousal import ArousalFunctor, JapaneseArousalFunctor
 from .entropy import EntropyFunctor, JapaneseEntropyFunctor
 from .thematic import ThematicFunctor, ThematicCoherenceFunctor, JapaneseThematicFunctor
 from .epistemic import EpistemicFunctor, JapaneseEpistemicFunctor, EpistemicPatternDetector
+from .japanese_sentiment import JapaneseSentimentFunctor, JapaneseSentimentAnalyzer
 from .base import BaseFunctor
 
 __all__ = [
     "BaseFunctor",
     "SentimentFunctor",
+    "JapaneseSentimentFunctor",
+    "JapaneseSentimentAnalyzer",
     "ArousalFunctor",
     "JapaneseArousalFunctor",
     "EntropyFunctor",

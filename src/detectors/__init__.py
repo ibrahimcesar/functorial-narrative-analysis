@@ -9,6 +9,7 @@ Available Detectors:
     - AristotleDetector: Classical three-act structure (Poetics)
     - FreytagDetector: Five-act pyramid structure (1863)
     - CampbellDetector: Hero's Journey / Monomyth (12 stages)
+    - ReaganClassifier: Reagan et al.'s 6 fundamental story shapes
 """
 
 from .harmon_circle import HarmonCircleDetector
@@ -16,6 +17,7 @@ from .kishotenketsu import KishotenketsuDetector
 from .aristotle import AristotleDetector
 from .freytag import FreytagDetector
 from .campbell import CampbellDetector
+from .reagan_shapes import ReaganClassifier
 
 __all__ = [
     "HarmonCircleDetector",
@@ -23,4 +25,5 @@ __all__ = [
     "AristotleDetector",
     "FreytagDetector",
     "CampbellDetector",
+    "ReaganClassifier",
 ]

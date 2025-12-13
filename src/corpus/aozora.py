@@ -1,479 +1,398 @@
 """
-Aozora Bunko Corpus Collector
+Aozora Bunko (青空文庫) Corpus Pipeline
 
-Downloads and processes Japanese literature from Aozora Bunko (青空文庫),
-a digital library of public domain Japanese texts.
+Downloads public domain Japanese literature from Aozora Bunko.
+These are classic works (mostly pre-1953) that are excellent for
+testing kishōtenketsu hypothesis on traditional Japanese narrative.
 
-This enables cross-cultural comparison with Western narrative structures.
+Features:
+    - Catalog parsing from GitHub mirror
+    - Author/work filtering
+    - Ruby text handling (furigana)
+    - Japanese text encoding (Shift-JIS → UTF-8)
 """
 
 import json
-import re
+import csv
 import random
+import urllib.request
 import zipfile
 import io
+import re
 from pathlib import Path
-from typing import Optional, List
-from dataclasses import dataclass, asdict
+from typing import List, Dict, Optional
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
 
-import requests
-from tqdm import tqdm
-import click
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 console = Console()
 
 
 @dataclass
-class AozoraText:
-    """Represents a single text from Aozora Bunko."""
-    id: str
+class AozoraBook:
+    """Represents a book from Aozora Bunko."""
+    book_id: str
     title: str
-    title_reading: str  # Furigana/reading
     author: str
-    author_reading: str
-    language: str
-    text: str
-    word_count: int
-    char_count: int
+    author_id: str
+    first_name: str = ""
+    last_name: str = ""
+    birth_year: Optional[int] = None
+    death_year: Optional[int] = None
+    category: str = ""
+    subcategory: str = ""
+    text_url: str = ""
+    html_url: str = ""
+    text: Optional[str] = None
+    word_count: Optional[int] = None
     source: str = "aozora"
-    year: Optional[int] = None
-    category: Optional[str] = None
-
+    
     def to_dict(self) -> dict:
         return asdict(self)
 
 
-class AozoraCollector:
+# Notable Japanese authors for sampling
+NOTABLE_AUTHORS = [
+    "夏目漱石",  # Natsume Soseki
+    "芥川龍之介",  # Akutagawa Ryunosuke
+    "太宰治",  # Dazai Osamu
+    "宮沢賢治",  # Miyazawa Kenji
+    "森鷗外",  # Mori Ogai
+    "泉鏡花",  # Izumi Kyoka
+    "樋口一葉",  # Higuchi Ichiyo
+    "坪内逍遥",  # Tsubouchi Shoyo
+    "島崎藤村",  # Shimazaki Toson
+    "谷崎潤一郎",  # Tanizaki Junichiro
+    "川端康成",  # Kawabata Yasunari
+    "志賀直哉",  # Shiga Naoya
+    "横光利一",  # Yokomitsu Riichi
+]
+
+
+class AozoraPipeline:
     """
-    Collects Japanese texts from Aozora Bunko.
-
-    Uses the Aozora Bunko GitHub mirror and CSV index for metadata,
-    then downloads text files directly.
+    Pipeline for downloading Japanese literature from Aozora Bunko.
+    
+    Usage:
+        pipeline = AozoraPipeline()
+        pipeline.load_catalog()
+        books = pipeline.filter_by_category('小説')  # Novels
+        sample = pipeline.sample(books, n=50)
+        pipeline.download_texts(sample)
+        pipeline.save_corpus(sample, output_dir)
     """
-
-    # Aozora Bunko index CSV (hosted on their website)
-    INDEX_URL = "https://www.aozora.gr.jp/index_pages/list_person_all_extended_utf8.zip"
-    # Alternative CSV URL
-    INDEX_CSV_URL = "https://www.aozora.gr.jp/index_pages/list_person_all_utf8.zip"
-    TEXT_BASE_URL = "https://www.aozora.gr.jp/cards/{author_id}/files/{file_name}"
-
-    # Alternative: Direct ZIP download
-    ZIP_URL = "https://www.aozora.gr.jp/cards/{author_id}/files/{zip_name}"
-
-    def __init__(self, output_dir: Path):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.index = None
-
-    def load_index(self) -> List[dict]:
-        """
-        Load the Aozora Bunko index CSV.
-
-        Returns:
-            List of book metadata dictionaries
-        """
-        console.print("[yellow]Loading Aozora Bunko index...[/yellow]")
-
-        import csv
-
-        # Try downloading ZIP file containing CSV
-        for url in [self.INDEX_URL, self.INDEX_CSV_URL]:
+    
+    # GitHub mirror of Aozora catalog
+    CATALOG_URL = "https://raw.githubusercontent.com/aozorahack/aozorabunko_text/master/index_pages/list_person_all_extended_utf8.csv"
+    
+    def __init__(self, cache_dir: Optional[Path] = None):
+        self.cache_dir = cache_dir or Path("data/cache/aozora")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.catalog: List[AozoraBook] = []
+    
+    def load_catalog(self, force_refresh: bool = False) -> List[AozoraBook]:
+        """Load Aozora Bunko catalog."""
+        catalog_file = self.cache_dir / "aozora_catalog.csv"
+        
+        if not catalog_file.exists() or force_refresh:
+            console.print("[yellow]Downloading Aozora catalog...[/yellow]")
             try:
-                console.print(f"[dim]Trying {url}[/dim]")
-                response = requests.get(url, timeout=120)
-                response.raise_for_status()
-
-                # Extract CSV from ZIP
-                with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-                    for name in zf.namelist():
-                        if name.endswith('.csv'):
-                            content = zf.read(name)
-                            # Try UTF-8 first, then Shift-JIS
-                            try:
-                                csv_text = content.decode('utf-8')
-                            except UnicodeDecodeError:
-                                csv_text = content.decode('shift_jis')
-
-                            lines = csv_text.split('\n')
-                            reader = csv.DictReader(lines)
-
-                            books = []
-                            for row in reader:
-                                if row.get('作品ID'):
-                                    books.append(row)
-
-                            if books:
-                                console.print(f"[green]Loaded {len(books)} entries from index[/green]")
-                                self.index = books
-                                return books
-
+                urllib.request.urlretrieve(self.CATALOG_URL, catalog_file)
+                console.print("[green]✓ Catalog downloaded[/green]")
             except Exception as e:
-                console.print(f"[yellow]Failed with {url}: {e}[/yellow]")
-                continue
-
-        console.print("[red]Could not load index from any source[/red]")
-        return []
-
-    def filter_fiction(self, books: List[dict]) -> List[dict]:
-        """
-        Filter for fiction/literary works.
-
-        Args:
-            books: List of all book entries
-
-        Returns:
-            Filtered list of fiction works
-        """
-        fiction_keywords = [
-            '小説', '物語', '短編', '長編',  # Novel, story, short, long
-        ]
-
-        # Known fiction authors (major Japanese novelists)
-        fiction_authors = [
-            '夏目', '芥川', '太宰', '川端', '三島', '谷崎',
-            '森鷗外', '泉鏡花', '宮沢賢治', '江戸川乱歩',
-            '坂口安吾', '堀辰雄', '横光利一', '梶井基次郎',
-        ]
-
-        filtered = []
-        seen_works = set()
-
-        for book in books:
-            title = book.get('作品名', '')
-            author = book.get('著者名', '')
-            work_id = book.get('作品ID', '')
-            status = book.get('状態', '')
-
-            # Skip if not public or already seen
-            if status != '公開' or work_id in seen_works:
-                continue
-
-            # Include if title contains fiction keywords
-            if any(kw in title for kw in fiction_keywords):
-                filtered.append(book)
-                seen_works.add(work_id)
-            # Or if by a known fiction author
-            elif any(auth in author for auth in fiction_authors):
-                filtered.append(book)
-                seen_works.add(work_id)
-
-        return filtered
-
-    def download_text(self, book: dict) -> Optional[str]:
-        """
-        Download text content for a book.
-
-        Args:
-            book: Book metadata dictionary
-
-        Returns:
-            Text content or None if download fails
-        """
-        # Handle both field naming conventions - strip BOM and leading zeros for URL
-        author_id_raw = book.get('人物ID', book.get('﻿人物ID', '')).lstrip('\ufeff')
-        work_id_raw = book.get('作品ID', '')
-
-        if not author_id_raw or not work_id_raw:
-            return None
-
-        # Aozora uses zero-padded IDs in URLs
-        author_id = author_id_raw.zfill(6)
-        # Work ID in card URL doesn't have leading zeros, but in file paths it might
-        work_id = work_id_raw.lstrip('0') or work_id_raw
-
-        # First, scrape the card page to find the actual download link
-        card_url = f"https://www.aozora.gr.jp/cards/{author_id}/card{work_id}.html"
-
+                console.print(f"[red]Failed: {e}[/red]")
+                # Try alternative
+                return self._load_fallback_catalog()
+        
+        console.print("[yellow]Parsing catalog...[/yellow]")
+        self.catalog = []
+        
         try:
-            response = requests.get(card_url, timeout=30)
-            if response.status_code == 200:
-                # Look for zip file links (they have version numbers like 773_ruby_5968.zip)
-                zip_matches = re.findall(r'href=["\']\.?/?([^"\']*\.zip)["\']', response.text)
-
-                for zip_file in zip_matches:
-                    # Prefer ruby (with furigana) or txt versions
-                    zip_url = f"https://www.aozora.gr.jp/cards/{author_id}/{zip_file}"
-                    if zip_file.startswith('files/'):
-                        zip_url = f"https://www.aozora.gr.jp/cards/{author_id}/{zip_file}"
-                    else:
-                        zip_url = f"https://www.aozora.gr.jp/cards/{author_id}/files/{zip_file}"
-
+            with open(catalog_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
                     try:
-                        zip_resp = requests.get(zip_url, timeout=30)
-                        if zip_resp.status_code == 200:
-                            with zipfile.ZipFile(io.BytesIO(zip_resp.content)) as zf:
-                                for name in zf.namelist():
-                                    if name.endswith('.txt'):
-                                        content = zf.read(name)
-                                        for encoding in ['shift_jis', 'utf-8', 'cp932', 'euc-jp']:
-                                            try:
-                                                return content.decode(encoding)
-                                            except UnicodeDecodeError:
-                                                continue
-                                        return content.decode('utf-8', errors='ignore')
+                        book = AozoraBook(
+                            book_id=row.get('作品ID', ''),
+                            title=row.get('作品名', ''),
+                            author=row.get('姓') + row.get('名', ''),
+                            author_id=row.get('人物ID', ''),
+                            first_name=row.get('名', ''),
+                            last_name=row.get('姓', ''),
+                            category=row.get('分類番号', ''),
+                            text_url=row.get('テキストファイルURL', ''),
+                            html_url=row.get('XHTML/HTMLファイルURL', ''),
+                        )
+                        if book.title and book.text_url:
+                            self.catalog.append(book)
                     except Exception:
                         continue
+        except Exception as e:
+            console.print(f"[red]Error parsing: {e}[/red]")
+            return self._load_fallback_catalog()
+        
+        console.print(f"[green]✓ Loaded {len(self.catalog)} books[/green]")
+        return self.catalog
+    
+    def _load_fallback_catalog(self) -> List[AozoraBook]:
+        """Load a curated list of notable works."""
+        console.print("[yellow]Using curated catalog...[/yellow]")
 
-        except Exception:
-            pass
+        # Curated list of well-known works with verified HTML URLs
+        # (ZIP URLs often return 404, HTML pages are more stable)
+        curated = [
+            # Natsume Soseki (夏目漱石)
+            ("夏目漱石", "吾輩は猫である", "https://www.aozora.gr.jp/cards/000148/files/789_14547.html"),
+            ("夏目漱石", "坊っちゃん", "https://www.aozora.gr.jp/cards/000148/files/752_14964.html"),
+            ("夏目漱石", "こころ", "https://www.aozora.gr.jp/cards/000148/files/773_14560.html"),
+            ("夏目漱石", "三四郎", "https://www.aozora.gr.jp/cards/000148/files/794_14946.html"),
+            # Akutagawa Ryunosuke (芥川龍之介)
+            ("芥川龍之介", "羅生門", "https://www.aozora.gr.jp/cards/000879/files/127_15260.html"),
+            ("芥川龍之介", "鼻", "https://www.aozora.gr.jp/cards/000879/files/42_15228.html"),
+            ("芥川龍之介", "藪の中", "https://www.aozora.gr.jp/cards/000879/files/179_15255.html"),
+            ("芥川龍之介", "河童", "https://www.aozora.gr.jp/cards/000879/files/69_14933.html"),
+            ("芥川龍之介", "蜘蛛の糸", "https://www.aozora.gr.jp/cards/000879/files/92_490.html"),
+            # Dazai Osamu (太宰治)
+            ("太宰治", "人間失格", "https://www.aozora.gr.jp/cards/000035/files/301_14912.html"),
+            ("太宰治", "走れメロス", "https://www.aozora.gr.jp/cards/000035/files/1567_14913.html"),
+            # Miyazawa Kenji (宮沢賢治)
+            ("宮沢賢治", "銀河鉄道の夜", "https://www.aozora.gr.jp/cards/000081/files/456_15050.html"),
+            ("宮沢賢治", "風の又三郎", "https://www.aozora.gr.jp/cards/000081/files/462_15405.html"),
+            ("宮沢賢治", "セロ弾きのゴーシュ", "https://www.aozora.gr.jp/cards/000081/files/470_15407.html"),
+            ("宮沢賢治", "注文の多い料理店", "https://www.aozora.gr.jp/cards/000081/files/43754_17659.html"),
+            # Nakajima Atsushi (中島敦)
+            ("中島敦", "山月記", "https://www.aozora.gr.jp/cards/000119/files/624_14544.html"),
+            # Kajii Motojiro (梶井基次郎)
+            ("梶井基次郎", "檸檬", "https://www.aozora.gr.jp/cards/000074/files/424_19826.html"),
+            # Izumi Kyoka (泉鏡花)
+            ("泉鏡花", "高野聖", "https://www.aozora.gr.jp/cards/000050/files/521_19518.html"),
+            # Higuchi Ichiyo (樋口一葉)
+            ("樋口一葉", "たけくらべ", "https://www.aozora.gr.jp/cards/000064/files/389_15253.html"),
+        ]
+        
+        self.catalog = []
+        for i, (author, title, url) in enumerate(curated):
+            book = AozoraBook(
+                book_id=str(i+1),
+                title=title,
+                author=author,
+                author_id=str(i),
+                text_url=url,
+            )
+            self.catalog.append(book)
+        
+        console.print(f"[green]✓ Loaded {len(self.catalog)} curated works[/green]")
+        return self.catalog
+    
+    def filter_by_author(self, author_name: str) -> List[AozoraBook]:
+        """Filter by author name."""
+        return [b for b in self.catalog if author_name in b.author]
+    
+    def filter_by_authors(self, authors: List[str]) -> List[AozoraBook]:
+        """Filter by multiple authors."""
+        result = []
+        for author in authors:
+            result.extend(self.filter_by_author(author))
+        return result
+    
+    def filter_notable_authors(self) -> List[AozoraBook]:
+        """Filter to notable Japanese authors."""
+        return self.filter_by_authors(NOTABLE_AUTHORS)
+    
+    def sample(
+        self,
+        books: List[AozoraBook],
+        n: int = 50,
+        seed: int = 42,
+    ) -> List[AozoraBook]:
+        """Sample books."""
+        random.seed(seed)
+        if len(books) <= n:
+            return books
+        return random.sample(books, n)
+    
+    def _clean_aozora_text(self, text: str) -> str:
+        """Clean Aozora text format."""
+        # Remove ruby annotations ｜word《reading》
+        text = re.sub(r'｜([^《]+)《[^》]+》', r'\1', text)
+        text = re.sub(r'《[^》]+》', '', text)
+        
+        # Remove other annotations
+        text = re.sub(r'［＃[^］]+］', '', text)
+        text = re.sub(r'【[^】]+】', '', text)
+        
+        # Normalize whitespace
+        text = re.sub(r'\n\n+', '\n\n', text)
+        
+        return text.strip()
+    
+    def _extract_text_from_html(self, html: str) -> str:
+        """Extract main text content from Aozora HTML page."""
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+
+            # Find main text div (Aozora uses class="main_text")
+            main_text = soup.find('div', class_='main_text')
+            if main_text:
+                text = main_text.get_text(separator='\n')
+            else:
+                # Fallback: get body text
+                body = soup.find('body')
+                if body:
+                    # Remove navigation, headers, etc.
+                    for tag in body.find_all(['script', 'style', 'nav', 'header', 'footer']):
+                        tag.decompose()
+                    text = body.get_text(separator='\n')
+                else:
+                    text = soup.get_text(separator='\n')
+
+            return text
+        except ImportError:
+            # If BeautifulSoup not available, use regex
+            # Remove HTML tags
+            text = re.sub(r'<[^>]+>', '', html)
+            return text
+
+    def _download_text(self, book: AozoraBook) -> Optional[str]:
+        """Download and extract text for a book."""
+        if not book.text_url:
+            return None
+
+        try:
+            req = urllib.request.Request(book.text_url, headers={
+                'User-Agent': 'FunctorialNarrativeAnalysis/1.0'
+            })
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = response.read()
+
+                # Handle zip files
+                if book.text_url.endswith('.zip'):
+                    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                        for name in zf.namelist():
+                            if name.endswith('.txt'):
+                                # Try Shift-JIS encoding (common for Aozora)
+                                try:
+                                    text = zf.read(name).decode('shift_jis')
+                                except:
+                                    try:
+                                        text = zf.read(name).decode('utf-8')
+                                    except:
+                                        text = zf.read(name).decode('cp932', errors='ignore')
+                                return self._clean_aozora_text(text)
+                elif book.text_url.endswith('.html'):
+                    # HTML page - extract text
+                    try:
+                        html = data.decode('shift_jis')
+                    except:
+                        try:
+                            html = data.decode('utf-8')
+                        except:
+                            html = data.decode('cp932', errors='ignore')
+                    text = self._extract_text_from_html(html)
+                    return self._clean_aozora_text(text)
+                else:
+                    # Plain text
+                    try:
+                        text = data.decode('shift_jis')
+                    except:
+                        text = data.decode('utf-8', errors='ignore')
+                    return self._clean_aozora_text(text)
+        except Exception as e:
+            console.print(f"[red]Download error for {book.title}: {e}[/red]")
+            return None
 
         return None
-
-    def clean_text(self, text: str) -> str:
-        """
-        Clean Aozora Bunko text format.
-
-        Removes:
-        - Ruby annotations (furigana): 《》
-        - Notation markers: ［＃...］
-        - Headers and footers
-
-        Args:
-            text: Raw Aozora text
-
-        Returns:
-            Cleaned text
-        """
-        # Remove ruby (furigana) annotations: 漢字《かんじ》 -> 漢字
-        text = re.sub(r'《[^》]+》', '', text)
-
-        # Remove notation marks: ［＃...］
-        text = re.sub(r'［＃[^］]+］', '', text)
-
-        # Remove gaiji (external character) notations
-        text = re.sub(r'※［＃[^］]+］', '', text)
-
-        # Find start of main text (after header)
-        start_markers = [
-            '-------------------------------------------------------',
-            '底本：',
-        ]
-
-        lines = text.split('\n')
-        start_idx = 0
-        end_idx = len(lines)
-
-        # Find content start (skip header)
-        for i, line in enumerate(lines):
-            if any(marker in line for marker in start_markers):
-                # Skip a few lines after marker
-                start_idx = i + 3
-                break
-
-        # Find content end (before footer)
-        for i in range(len(lines) - 1, 0, -1):
-            if '底本：' in lines[i] or '青空文庫' in lines[i]:
-                end_idx = i
-                break
-
-        # Extract main content
-        content_lines = lines[start_idx:end_idx]
-
-        # Join and clean whitespace
-        text = '\n'.join(content_lines)
-        text = re.sub(r'\n{3,}', '\n\n', text)  # Reduce multiple newlines
-
-        return text.strip()
-
-    def count_japanese_chars(self, text: str) -> int:
-        """
-        Count Japanese characters (kanji, hiragana, katakana).
-
-        This is more meaningful than word count for Japanese.
-        """
-        # Match Japanese characters
-        japanese_pattern = re.compile(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]')
-        return len(japanese_pattern.findall(text))
-
-    def estimate_word_count(self, text: str) -> int:
-        """
-        Estimate word count for Japanese text.
-
-        Japanese doesn't use spaces, so we estimate based on character count.
-        Average Japanese word is ~2-3 characters.
-        """
-        char_count = self.count_japanese_chars(text)
-        return char_count // 2  # Rough estimate
-
-    def process_book(self, book: dict) -> Optional[AozoraText]:
-        """
-        Download and process a single book.
-
-        Args:
-            book: Book metadata from index
-
-        Returns:
-            AozoraText object or None if processing fails
-        """
-        # Download text
-        raw_text = self.download_text(book)
-        if not raw_text:
-            return None
-
-        # Clean text
-        text = self.clean_text(raw_text)
-
-        # Calculate counts
-        char_count = self.count_japanese_chars(text)
-        word_count = self.estimate_word_count(text)
-
-        # Filter by length (equivalent to 10K-500K words in English)
-        # Japanese chars: ~5K-250K chars (2-3 chars per word)
-        if char_count < 5000 or char_count > 300000:
-            return None
-
-        # Extract year from metadata
-        year = None
-        year_str = book.get('状態の開始日', '') or book.get('底本名', '')
-        year_match = re.search(r'(\d{4})', year_str)
-        if year_match:
-            year = int(year_match.group(1))
-
-        return AozoraText(
-            id=f"aozora_{book.get('作品ID', 'unknown')}",
-            title=book.get('作品名', 'Unknown'),
-            title_reading=book.get('作品名読み', ''),
-            author=book.get('著者名', 'Unknown'),
-            author_reading=book.get('著者名読み', ''),
-            language="ja",
-            text=text,
-            word_count=word_count,
-            char_count=char_count,
-            year=year,
-            category=book.get('仮名遣い種別', ''),
-        )
-
-    def collect(
+    
+    def download_texts(
         self,
-        sample_size: int = 100,
-        random_sample: bool = True,
-        seed: int = 42
-    ) -> List[AozoraText]:
-        """
-        Collect Japanese texts from Aozora Bunko.
-
-        Args:
-            sample_size: Number of texts to collect
-            random_sample: Whether to randomly sample
-            seed: Random seed for reproducibility
-
-        Returns:
-            List of AozoraText objects
-        """
-        console.print(f"[bold blue]Collecting {sample_size} texts from Aozora Bunko[/bold blue]")
-
-        # Load index if not already loaded
-        if self.index is None:
-            self.load_index()
-
-        if not self.index:
-            console.print("[red]Failed to load index[/red]")
-            return []
-
-        # Filter for fiction
-        fiction_books = self.filter_fiction(self.index)
-        console.print(f"[blue]Found {len(fiction_books)} fiction entries[/blue]")
-
-        if random_sample:
-            random.seed(seed)
-            random.shuffle(fiction_books)
-
-        # Process books
-        collected = []
-        pbar = tqdm(fiction_books, desc="Downloading texts")
-
-        for book in pbar:
-            if len(collected) >= sample_size:
-                break
-
-            pbar.set_postfix({"collected": len(collected)})
-
-            try:
-                aozora_text = self.process_book(book)
-                if aozora_text:
-                    collected.append(aozora_text)
-
-                    # Save individual text
-                    text_path = self.output_dir / f"{aozora_text.id}.json"
-                    with open(text_path, 'w', encoding='utf-8') as f:
-                        json.dump(aozora_text.to_dict(), f, ensure_ascii=False, indent=2)
-
-            except Exception as e:
-                console.print(f"[red]Error processing {book.get('作品名', 'unknown')}: {e}[/red]")
-                continue
-
-            # Rate limiting
-            import time
-            time.sleep(0.5)
-
-        # Save manifest
-        manifest = {
-            "source": "aozora",
-            "language": "ja",
-            "count": len(collected),
-            "sample_size": sample_size,
-            "seed": seed,
-            "texts": [{
-                "id": t.id,
-                "title": t.title,
-                "author": t.author,
-                "char_count": t.char_count,
-                "word_count": t.word_count,
-            } for t in collected]
+        books: List[AozoraBook],
+        min_chars: int = 5000,
+    ) -> List[AozoraBook]:
+        """Download texts for books."""
+        successful = []
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Downloading...", total=len(books))
+            
+            for book in books:
+                progress.update(task, description=f"[cyan]{book.title[:20]}...")
+                
+                text = self._download_text(book)
+                
+                if text and len(text) >= min_chars:
+                    book.text = text
+                    book.word_count = len(text)
+                    successful.append(book)
+                
+                progress.advance(task)
+        
+        console.print(f"[green]✓ Downloaded {len(successful)}/{len(books)} books[/green]")
+        return successful
+    
+    def save_corpus(self, books: List[AozoraBook], output_dir: Path) -> None:
+        """Save corpus to disk."""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        metadata = {
+            'timestamp': datetime.now().isoformat(),
+            'total_books': len(books),
+            'source': 'aozora',
+            'books': [{k: v for k, v in b.to_dict().items() if k != 'text'} for b in books]
         }
-
-        manifest_path = self.output_dir / "manifest.json"
-        with open(manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-        console.print(f"[bold green]✓ Collected {len(collected)} texts[/bold green]")
-        console.print(f"[green]Saved to {self.output_dir}[/green]")
-
-        return collected
-
-
-def create_windows_japanese(
-    text: str,
-    window_size: int = 500,  # Characters, not words
-    overlap: int = 250
-) -> List[str]:
-    """
-    Create overlapping windows from Japanese text.
-
-    Since Japanese doesn't use spaces, we window by character count.
-
-    Args:
-        text: Input text
-        window_size: Characters per window
-        overlap: Character overlap between windows
-
-    Returns:
-        List of text windows
-    """
-    # Remove whitespace for character counting
-    chars = re.sub(r'\s+', '', text)
-
-    step = window_size - overlap
-    windows = []
-
-    for i in range(0, len(chars), step):
-        window = chars[i:i + window_size]
-        # Only include windows that are at least half the target size
-        if len(window) >= window_size // 2:
-            windows.append(window)
-
-    return windows if windows else [text]
+        
+        with open(output_dir / 'metadata.json', 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
+        
+        texts_dir = output_dir / 'texts'
+        texts_dir.mkdir(exist_ok=True)
+        
+        for book in books:
+            if book.text:
+                with open(texts_dir / f'{book.book_id}.json', 'w', encoding='utf-8') as f:
+                    json.dump(book.to_dict(), f, indent=2, ensure_ascii=False)
+        
+        console.print(f"[green]✓ Saved corpus to {output_dir}[/green]")
 
 
-@click.command()
-@click.option('--output', '-o', required=True, type=click.Path(), help='Output directory')
-@click.option('--sample-size', '-n', default=50, help='Number of texts to collect')
-@click.option('--seed', default=42, help='Random seed for reproducibility')
-def main(output: str, sample_size: int, seed: int):
-    """Download Japanese fiction texts from Aozora Bunko."""
-    collector = AozoraCollector(Path(output))
-    collector.collect(sample_size=sample_size, seed=seed)
+def main():
+    """CLI entry point."""
+    import click
+    
+    @click.command()
+    @click.option('--n-books', '-n', default=20, help='Number of books')
+    @click.option('--output', '-o', default='data/raw/aozora', help='Output directory')
+    @click.option('--seed', '-s', default=42, help='Random seed')
+    def download_corpus(n_books, output, seed):
+        """Download Japanese literature from Aozora Bunko."""
+        pipeline = AozoraPipeline()
+        pipeline.load_catalog()
+        
+        # Get all books (or notable authors)
+        books = pipeline.catalog if len(pipeline.catalog) > 0 else []
+        
+        # Sample
+        sample = pipeline.sample(books, n=n_books, seed=seed)
+        console.print(f"[cyan]Sampled {len(sample)} books[/cyan]")
+        
+        # Download
+        successful = pipeline.download_texts(sample)
+        
+        # Save
+        pipeline.save_corpus(successful, Path(output))
+        
+        console.print(f"\n[bold green]Done! Downloaded {len(successful)} books[/bold green]")
+    
+    download_corpus()
 
 
 if __name__ == "__main__":

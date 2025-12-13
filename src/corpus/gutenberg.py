@@ -1,332 +1,454 @@
 """
-Project Gutenberg Corpus Collector
+Project Gutenberg Corpus Pipeline
 
 Downloads and processes fiction texts from Project Gutenberg for narrative analysis.
-This is the primary corpus for replicating Reagan et al. (2016).
+
+Features:
+    - Catalog parsing from Gutenberg RDF/CSV
+    - Fiction filtering by Library of Congress classification
+    - Header/footer stripping
+    - Metadata extraction
+    - Random and popularity-weighted sampling
 """
 
 import json
 import re
+import csv
 import random
 from pathlib import Path
-from typing import Optional
-from dataclasses import dataclass, asdict
+from typing import List, Dict, Optional, Tuple
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
+import urllib.request
+import urllib.error
+from io import StringIO
 
-import requests
-from tqdm import tqdm
-import click
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 console = Console()
 
 
 @dataclass
-class GutenbergText:
-    """Represents a single text from Project Gutenberg."""
+class GutenbergBook:
+    """Represents a book from Project Gutenberg."""
     id: str
     title: str
     author: str
+    year: Optional[int]
     language: str
-    text: str
-    word_count: int
+    subjects: List[str] = field(default_factory=list)
+    loc_class: Optional[str] = None  # Library of Congress classification
+    downloads: int = 0
+    text: Optional[str] = None
+    word_count: Optional[int] = None
     source: str = "gutenberg"
-    year: Optional[int] = None
-    subjects: Optional[list] = None
-
+    
     def to_dict(self) -> dict:
         return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "GutenbergBook":
+        return cls(**data)
 
 
-class GutenbergCollector:
+# Fiction-related Library of Congress classifications
+FICTION_LOC_CLASSES = {
+    'PS': 'American literature',
+    'PR': 'English literature', 
+    'PZ': 'Fiction and juvenile belles lettres',
+    'PT': 'German literature',
+    'PQ': 'French, Italian, Spanish, Portuguese literature',
+    'PN': 'General literature (includes drama/fiction)',
+}
+
+# Subject keywords indicating fiction
+FICTION_SUBJECT_KEYWORDS = [
+    'fiction', 'novel', 'stories', 'tale', 'romance',
+    'adventure', 'mystery', 'detective', 'science fiction',
+    'fantasy', 'horror', 'thriller', 'drama', 'plays',
+]
+
+
+class GutenbergPipeline:
     """
-    Collects fiction texts from Project Gutenberg.
-
-    Uses the Gutendex API (https://gutendex.com/) to search and filter texts,
-    then downloads raw text from Gutenberg mirrors.
+    Pipeline for downloading and processing Project Gutenberg texts.
+    
+    Usage:
+        pipeline = GutenbergPipeline()
+        pipeline.load_catalog()
+        books = pipeline.filter_fiction(language='en')
+        sample = pipeline.sample(books, n=100)
+        pipeline.download_texts(sample)
+        pipeline.save_corpus(sample, output_dir)
     """
-
-    GUTENDEX_API = "https://gutendex.com/books"
-    GUTENBERG_MIRROR = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
-
-    # Fiction subject keywords
-    FICTION_SUBJECTS = [
-        "Fiction",
-        "English fiction",
-        "American fiction",
-        "Short stories",
-        "Adventure stories",
-        "Love stories",
-        "Science fiction",
-        "Fantasy fiction",
-        "Detective and mystery stories",
-        "Gothic fiction",
-        "Domestic fiction",
-        "Historical fiction",
-    ]
-
-    def __init__(self, output_dir: Path):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-    def search_fiction(self, max_results: int = 1000) -> list[dict]:
+    
+    CATALOG_URL = "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv"
+    MIRROR_URL = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
+    ALT_MIRROR = "https://www.gutenberg.org/files/{id}/{id}-0.txt"
+    
+    def __init__(self, cache_dir: Optional[Path] = None):
         """
-        Search for fiction texts using Gutendex API.
-
+        Initialize pipeline.
+        
         Args:
-            max_results: Maximum number of results to return
-
-        Returns:
-            List of book metadata dictionaries
+            cache_dir: Directory for caching catalog and texts
         """
-        console.print("[yellow]Searching Gutendex for fiction texts...[/yellow]")
-
-        all_books = []
-        seen_ids = set()
-
-        for subject in tqdm(self.FICTION_SUBJECTS, desc="Searching subjects"):
-            page_url = f"{self.GUTENDEX_API}?topic={subject}&languages=en"
-
-            while page_url and len(all_books) < max_results * 2:  # Get extra for filtering
-                try:
-                    response = requests.get(page_url, timeout=30)
-                    response.raise_for_status()
-                    data = response.json()
-
-                    for book in data.get("results", []):
-                        book_id = book.get("id")
-                        if book_id and book_id not in seen_ids:
-                            seen_ids.add(book_id)
-                            all_books.append(book)
-
-                    page_url = data.get("next")
-
-                    # Rate limiting
-                    if page_url:
-                        import time
-                        time.sleep(0.5)
-
-                except requests.RequestException as e:
-                    console.print(f"[red]Error fetching {page_url}: {e}[/red]")
-                    break
-
-        console.print(f"[green]Found {len(all_books)} unique fiction texts[/green]")
-        return all_books[:max_results * 2]
-
-    def download_text(self, book_id: int) -> Optional[str]:
+        self.cache_dir = cache_dir or Path("data/cache/gutenberg")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.catalog: List[GutenbergBook] = []
+    
+    def load_catalog(self, force_refresh: bool = False) -> List[GutenbergBook]:
         """
-        Download raw text for a book from Gutenberg.
-
+        Load the Gutenberg catalog.
+        
         Args:
-            book_id: Gutenberg book ID
-
+            force_refresh: Re-download catalog even if cached
+            
         Returns:
-            Raw text content or None if download fails
+            List of GutenbergBook entries
         """
-        url = self.GUTENBERG_MIRROR.format(id=book_id)
-
-        try:
-            response = requests.get(url, timeout=60)
-            response.raise_for_status()
-            return response.text
-        except requests.RequestException:
-            # Try alternate format
-            alt_url = f"https://www.gutenberg.org/files/{book_id}/{book_id}-0.txt"
+        catalog_file = self.cache_dir / "pg_catalog.csv"
+        
+        # Download if needed
+        if not catalog_file.exists() or force_refresh:
+            console.print("[yellow]Downloading Gutenberg catalog...[/yellow]")
             try:
-                response = requests.get(alt_url, timeout=60)
-                response.raise_for_status()
-                return response.text
-            except requests.RequestException:
-                return None
-
-    def strip_headers(self, text: str) -> str:
-        """
-        Remove Project Gutenberg headers and footers.
-
-        Args:
-            text: Raw text with headers/footers
-
-        Returns:
-            Cleaned text content
-        """
-        # Find start marker
-        start_patterns = [
-            r"\*\*\* START OF (THE|THIS) PROJECT GUTENBERG EBOOK .+? \*\*\*",
-            r"\*\*\*START OF (THE|THIS) PROJECT GUTENBERG EBOOK .+?\*\*\*",
-            r"START OF (THE|THIS) PROJECT GUTENBERG EBOOK",
-        ]
-
-        start_pos = 0
-        for pattern in start_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                start_pos = match.end()
-                break
-
-        # Find end marker
-        end_patterns = [
-            r"\*\*\* END OF (THE|THIS) PROJECT GUTENBERG EBOOK .+? \*\*\*",
-            r"\*\*\*END OF (THE|THIS) PROJECT GUTENBERG EBOOK .+?\*\*\*",
-            r"END OF (THE|THIS) PROJECT GUTENBERG EBOOK",
-            r"End of Project Gutenberg",
-        ]
-
-        end_pos = len(text)
-        for pattern in end_patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                end_pos = match.start()
-                break
-
-        cleaned = text[start_pos:end_pos].strip()
-
-        # Remove any remaining boilerplate at the start
-        lines = cleaned.split('\n')
-        content_start = 0
-        for i, line in enumerate(lines[:100]):  # Check first 100 lines
-            if len(line.strip()) > 50 and not any(
-                kw in line.lower() for kw in
-                ['produced by', 'distributed proofreaders', 'transcriber', 'scanner', 'ebook']
-            ):
-                content_start = i
-                break
-
-        return '\n'.join(lines[content_start:]).strip()
-
-    def process_book(self, book_meta: dict) -> Optional[GutenbergText]:
-        """
-        Download and process a single book.
-
-        Args:
-            book_meta: Book metadata from Gutendex
-
-        Returns:
-            GutenbergText object or None if processing fails
-        """
-        book_id = book_meta.get("id")
-
-        # Download raw text
-        raw_text = self.download_text(book_id)
-        if not raw_text:
-            return None
-
-        # Strip headers
-        text = self.strip_headers(raw_text)
-
-        # Calculate word count
-        word_count = len(text.split())
-
-        # Filter by length (10K-500K words for novels)
-        if word_count < 10000 or word_count > 500000:
-            return None
-
-        # Extract metadata
-        authors = book_meta.get("authors", [])
-        author_name = authors[0].get("name", "Unknown") if authors else "Unknown"
-
-        # Extract year from author birth/death or title
-        year = None
-        if authors and authors[0].get("birth_year"):
-            # Estimate publication as author age 30-50
-            birth = authors[0].get("birth_year")
-            death = authors[0].get("death_year")
-            if death:
-                year = (birth + death) // 2
-            else:
-                year = birth + 40
-
-        return GutenbergText(
-            id=f"pg{book_id}",
-            title=book_meta.get("title", "Unknown"),
-            author=author_name,
-            language="en",
-            text=text,
-            word_count=word_count,
-            year=year,
-            subjects=book_meta.get("subjects", []),
-        )
-
-    def collect(
-        self,
-        sample_size: int = 1000,
-        random_sample: bool = True,
-        seed: int = 42
-    ) -> list[GutenbergText]:
-        """
-        Collect fiction texts from Project Gutenberg.
-
-        Args:
-            sample_size: Number of texts to collect
-            random_sample: Whether to randomly sample from available texts
-            seed: Random seed for reproducibility
-
-        Returns:
-            List of GutenbergText objects
-        """
-        console.print(f"[bold blue]Collecting {sample_size} texts from Project Gutenberg[/bold blue]")
-
-        # Search for fiction
-        books = self.search_fiction(max_results=sample_size * 3)
-
-        if random_sample:
-            random.seed(seed)
-            random.shuffle(books)
-
-        # Process books
-        collected = []
-        pbar = tqdm(books, desc="Downloading texts")
-
-        for book_meta in pbar:
-            if len(collected) >= sample_size:
-                break
-
-            pbar.set_postfix({"collected": len(collected)})
-
-            try:
-                text = self.process_book(book_meta)
-                if text:
-                    collected.append(text)
-
-                    # Save individual text
-                    text_path = self.output_dir / f"{text.id}.json"
-                    with open(text_path, 'w', encoding='utf-8') as f:
-                        json.dump(text.to_dict(), f, ensure_ascii=False, indent=2)
-
+                urllib.request.urlretrieve(self.CATALOG_URL, catalog_file)
+                console.print("[green]✓ Catalog downloaded[/green]")
             except Exception as e:
-                console.print(f"[red]Error processing {book_meta.get('id')}: {e}[/red]")
+                console.print(f"[red]Failed to download catalog: {e}[/red]")
+                return []
+        
+        # Parse catalog
+        console.print("[yellow]Parsing catalog...[/yellow]")
+        self.catalog = []
+        
+        with open(catalog_file, 'r', encoding='utf-8', errors='ignore') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    # Extract book ID
+                    book_id = row.get('Text#', '').strip()
+                    if not book_id or not book_id.isdigit():
+                        continue
+                    
+                    # Parse year from title or author dates
+                    year = None
+                    authors = row.get('Authors', '')
+                    year_match = re.search(r'\b(1[4-9]\d{2}|20[0-2]\d)\b', authors)
+                    if year_match:
+                        year = int(year_match.group(1))
+                    
+                    # Parse subjects
+                    subjects_str = row.get('Subjects', '')
+                    subjects = [s.strip() for s in subjects_str.split(';') if s.strip()]
+                    
+                    # Parse LoC class
+                    loc_class = row.get('LoCC', '').strip().split()[0] if row.get('LoCC') else None
+                    
+                    book = GutenbergBook(
+                        id=f"pg{book_id}",
+                        title=row.get('Title', 'Unknown').strip(),
+                        author=row.get('Authors', 'Unknown').split(',')[0].strip(),
+                        year=year,
+                        language=row.get('Language', 'en').strip().lower(),
+                        subjects=subjects,
+                        loc_class=loc_class,
+                    )
+                    self.catalog.append(book)
+                except Exception:
+                    continue
+        
+        console.print(f"[green]✓ Loaded {len(self.catalog)} books from catalog[/green]")
+        return self.catalog
+    
+    def filter_fiction(
+        self, 
+        language: str = 'en',
+        min_year: Optional[int] = None,
+        max_year: Optional[int] = None,
+    ) -> List[GutenbergBook]:
+        """
+        Filter catalog to fiction texts.
+        
+        Args:
+            language: Language code (default: 'en')
+            min_year: Minimum publication year
+            max_year: Maximum publication year
+            
+        Returns:
+            Filtered list of fiction books
+        """
+        fiction = []
+        
+        for book in self.catalog:
+            # Language filter
+            if book.language != language:
                 continue
-
-            # Rate limiting
-            import time
-            time.sleep(0.3)
-
-        # Save manifest
-        manifest = {
-            "source": "gutenberg",
-            "count": len(collected),
-            "sample_size": sample_size,
-            "seed": seed,
-            "texts": [{"id": t.id, "title": t.title, "author": t.author, "word_count": t.word_count}
-                     for t in collected]
+            
+            # Year filter
+            if min_year and book.year and book.year < min_year:
+                continue
+            if max_year and book.year and book.year > max_year:
+                continue
+            
+            # Fiction filter: LoC class or subject keywords
+            is_fiction = False
+            
+            # Check LoC classification
+            if book.loc_class and book.loc_class[:2] in FICTION_LOC_CLASSES:
+                is_fiction = True
+            
+            # Check subjects
+            if not is_fiction:
+                subjects_lower = ' '.join(book.subjects).lower()
+                for keyword in FICTION_SUBJECT_KEYWORDS:
+                    if keyword in subjects_lower:
+                        is_fiction = True
+                        break
+            
+            if is_fiction:
+                fiction.append(book)
+        
+        console.print(f"[green]✓ Found {len(fiction)} fiction texts in {language}[/green]")
+        return fiction
+    
+    def sample(
+        self,
+        books: List[GutenbergBook],
+        n: int = 100,
+        method: str = 'random',
+        seed: int = 42,
+    ) -> List[GutenbergBook]:
+        """
+        Sample books from filtered list.
+        
+        Args:
+            books: List of books to sample from
+            n: Number of books to sample
+            method: 'random' or 'stratified' (by decade)
+            seed: Random seed for reproducibility
+            
+        Returns:
+            Sampled list of books
+        """
+        random.seed(seed)
+        
+        if len(books) <= n:
+            return books
+        
+        if method == 'random':
+            return random.sample(books, n)
+        
+        elif method == 'stratified':
+            # Stratify by decade
+            by_decade = {}
+            for book in books:
+                if book.year:
+                    decade = (book.year // 10) * 10
+                else:
+                    decade = 0
+                if decade not in by_decade:
+                    by_decade[decade] = []
+                by_decade[decade].append(book)
+            
+            # Sample proportionally from each decade
+            sample = []
+            for decade, decade_books in by_decade.items():
+                k = max(1, int(n * len(decade_books) / len(books)))
+                sample.extend(random.sample(decade_books, min(k, len(decade_books))))
+            
+            # Trim or pad to exactly n
+            if len(sample) > n:
+                sample = random.sample(sample, n)
+            elif len(sample) < n:
+                remaining = [b for b in books if b not in sample]
+                sample.extend(random.sample(remaining, min(n - len(sample), len(remaining))))
+            
+            return sample
+        
+        return random.sample(books, n)
+    
+    def _strip_gutenberg_header_footer(self, text: str) -> str:
+        """Remove Gutenberg boilerplate from text."""
+        lines = text.split('\n')
+        start_idx = 0
+        end_idx = len(lines)
+        
+        # Find start marker
+        for i, line in enumerate(lines):
+            if '*** START' in line.upper() or 'START OF' in line.upper():
+                start_idx = i + 1
+                break
+        
+        # Find end marker
+        for i in range(len(lines) - 1, -1, -1):
+            if '*** END' in lines[i].upper() or 'END OF' in lines[i].upper():
+                end_idx = i
+                break
+        
+        clean_text = '\n'.join(lines[start_idx:end_idx])
+        
+        # Fallback if markers not found
+        if len(clean_text) < 1000:
+            return text
+        
+        return clean_text
+    
+    def download_text(self, book: GutenbergBook) -> Optional[str]:
+        """
+        Download text for a single book.
+        
+        Args:
+            book: Book to download
+            
+        Returns:
+            Cleaned text or None if failed
+        """
+        book_num = book.id.replace('pg', '')
+        
+        # Try primary mirror
+        urls = [
+            self.MIRROR_URL.format(id=book_num),
+            self.ALT_MIRROR.format(id=book_num),
+        ]
+        
+        for url in urls:
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    text = response.read().decode('utf-8', errors='ignore')
+                    clean_text = self._strip_gutenberg_header_footer(text)
+                    return clean_text
+            except Exception:
+                continue
+        
+        return None
+    
+    def download_texts(
+        self,
+        books: List[GutenbergBook],
+        min_words: int = 10000,
+        max_words: int = 500000,
+    ) -> List[GutenbergBook]:
+        """
+        Download texts for a list of books.
+        
+        Args:
+            books: Books to download
+            min_words: Minimum word count to include
+            max_words: Maximum word count to include
+            
+        Returns:
+            List of books with text successfully downloaded
+        """
+        successful = []
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Downloading texts...", total=len(books))
+            
+            for book in books:
+                progress.update(task, description=f"[cyan]{book.title[:40]}...")
+                
+                text = self.download_text(book)
+                
+                if text:
+                    word_count = len(text.split())
+                    
+                    if min_words <= word_count <= max_words:
+                        book.text = text
+                        book.word_count = word_count
+                        successful.append(book)
+                
+                progress.advance(task)
+        
+        console.print(f"[green]✓ Successfully downloaded {len(successful)}/{len(books)} texts[/green]")
+        return successful
+    
+    def save_corpus(
+        self,
+        books: List[GutenbergBook],
+        output_dir: Path,
+        format: str = 'json',
+    ) -> None:
+        """
+        Save corpus to disk.
+        
+        Args:
+            books: Books to save
+            output_dir: Output directory
+            format: 'json' or 'txt'
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save metadata
+        metadata = {
+            'timestamp': datetime.now().isoformat(),
+            'total_books': len(books),
+            'books': [
+                {k: v for k, v in b.to_dict().items() if k != 'text'}
+                for b in books
+            ]
         }
+        
+        with open(output_dir / 'metadata.json', 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        # Save texts
+        texts_dir = output_dir / 'texts'
+        texts_dir.mkdir(exist_ok=True)
+        
+        for book in books:
+            if book.text:
+                if format == 'json':
+                    with open(texts_dir / f'{book.id}.json', 'w') as f:
+                        json.dump(book.to_dict(), f, indent=2)
+                else:
+                    with open(texts_dir / f'{book.id}.txt', 'w') as f:
+                        f.write(book.text)
+        
+        console.print(f"[green]✓ Saved corpus to {output_dir}[/green]")
 
-        manifest_path = self.output_dir / "manifest.json"
-        with open(manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
 
-        console.print(f"[bold green]✓ Collected {len(collected)} texts[/bold green]")
-        console.print(f"[green]Saved to {self.output_dir}[/green]")
-
-        return collected
-
-
-@click.command()
-@click.option('--output', '-o', required=True, type=click.Path(), help='Output directory')
-@click.option('--sample-size', '-n', default=100, help='Number of texts to collect')
-@click.option('--seed', default=42, help='Random seed for reproducibility')
-def main(output: str, sample_size: int, seed: int):
-    """Download fiction texts from Project Gutenberg."""
-    collector = GutenbergCollector(Path(output))
-    collector.collect(sample_size=sample_size, seed=seed)
+def main():
+    """CLI entry point for Gutenberg pipeline."""
+    import click
+    
+    @click.command()
+    @click.option('--language', '-l', default='en', help='Language code')
+    @click.option('--n-books', '-n', default=100, help='Number of books to download')
+    @click.option('--output', '-o', default='data/raw/gutenberg', help='Output directory')
+    @click.option('--method', '-m', default='random', help='Sampling method: random or stratified')
+    @click.option('--seed', '-s', default=42, help='Random seed')
+    def download_corpus(language, n_books, output, method, seed):
+        """Download fiction corpus from Project Gutenberg."""
+        pipeline = GutenbergPipeline()
+        
+        # Load and filter
+        pipeline.load_catalog()
+        fiction = pipeline.filter_fiction(language=language)
+        
+        # Sample
+        sample = pipeline.sample(fiction, n=n_books, method=method, seed=seed)
+        console.print(f"[cyan]Sampled {len(sample)} books[/cyan]")
+        
+        # Download
+        successful = pipeline.download_texts(sample)
+        
+        # Save
+        pipeline.save_corpus(successful, Path(output))
+        
+        console.print(f"\n[bold green]Done! Downloaded {len(successful)} books to {output}[/bold green]")
+    
+    download_corpus()
 
 
 if __name__ == "__main__":

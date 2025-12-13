@@ -1,16 +1,20 @@
 """
-Corpus collection modules for Functorial Narrative Analysis.
+Corpus ingestion pipelines.
 
-This package provides collectors for various narrative corpora:
-- gutenberg: Project Gutenberg public domain texts (English)
-- aozora: Aozora Bunko public domain texts (Japanese)
-- ao3: Archive of Our Own fan fiction
-- syosetu: Japanese web novels
-- ancient: Ancient epics (Gilgamesh, Homer, etc.)
-- streaming: Streaming-era television content
+Modules for downloading and processing text corpora from various sources.
+
+Available Pipelines:
+    - GutenbergPipeline: Project Gutenberg fiction corpus
+    - SyosetuPipeline: Syosetu (小説家になろう) Japanese web novels
 """
 
-from .gutenberg import GutenbergCollector
-from .aozora import AozoraCollector
+from .gutenberg import GutenbergPipeline, GutenbergBook
+from .syosetu import SyosetuPipeline, SyosetuNovel, SYOSETU_GENRES
 
-__all__ = ["GutenbergCollector", "AozoraCollector"]
+__all__ = [
+    "GutenbergPipeline",
+    "GutenbergBook",
+    "SyosetuPipeline",
+    "SyosetuNovel",
+    "SYOSETU_GENRES",
+]
