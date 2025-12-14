@@ -24,6 +24,18 @@ from .japanese_sentiment import JapaneseSentimentFunctor, JapaneseSentimentAnaly
 from .chinese_sentiment import ChineseSentimentFunctor, ClassicalChineseSentimentFunctor, ChineseSentimentAnalyzer
 from .arabic_sentiment import ArabicSentimentFunctor, ClassicalArabicSentimentFunctor, ArabicSentimentAnalyzer
 from .russian_sentiment import RussianSentimentFunctor, ClassicalRussianSentimentFunctor, RussianSentimentAnalyzer
+from .semantic_tracking import (
+    CharacterInteractionFunctor,
+    RussianCharacterInteractionFunctor,
+    NarrativeEventFunctor,
+    RussianNarrativeEventFunctor,
+    PlotStateFunctor,
+    RussianPlotStateFunctor,
+    InteractionType,
+    EventType,
+    PlotStateType,
+    compare_semantic_trajectories,
+)
 from .base import BaseFunctor
 
 __all__ = [
@@ -69,4 +81,15 @@ __all__ = [
     "RussianSentimentFunctor",
     "ClassicalRussianSentimentFunctor",
     "RussianSentimentAnalyzer",
+    # Semantic/Plot Tracking
+    "CharacterInteractionFunctor",
+    "RussianCharacterInteractionFunctor",
+    "NarrativeEventFunctor",
+    "RussianNarrativeEventFunctor",
+    "PlotStateFunctor",
+    "RussianPlotStateFunctor",
+    "InteractionType",
+    "EventType",
+    "PlotStateType",
+    "compare_semantic_trajectories",
 ]

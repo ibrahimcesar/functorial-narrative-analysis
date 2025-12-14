@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 
 # Import functors
 from src.functors.sentiment import SentimentFunctor
-from src.functors.russian_sentiment import ClassicalRussianSentimentFunctor, create_windows_russian
+from src.functors.russian_sentiment import ClassicalRussianSentimentFunctor, RussianSentimentFunctor, create_windows_russian
 from src.functors.entropy import EntropyFunctor
 from src.functors.pacing import PacingFunctor
 from src.detectors.icc import ICCDetector
@@ -300,9 +300,10 @@ def compare_translations(
         TranslationComparisonResult with all divergence metrics
     """
     # Create windows based on language
+    # Use dictionary method for Russian - transformer models classify literary text as "neutral"
     if original_language == 'ru':
         original_windows = create_windows_russian(original_text, window_size, window_size // 2)
-        original_sentiment_functor = ClassicalRussianSentimentFunctor()
+        original_sentiment_functor = ClassicalRussianSentimentFunctor(method="dictionary")
     else:
         original_windows = create_windows_english(original_text, window_size, window_size // 2)
         original_sentiment_functor = SentimentFunctor()
@@ -374,7 +375,7 @@ def plot_comparison(
     # Create windows based on language
     if original_language == 'ru':
         original_windows = create_windows_russian(original_text, window_size, window_size // 2)
-        original_sentiment_functor = ClassicalRussianSentimentFunctor()
+        original_sentiment_functor = ClassicalRussianSentimentFunctor(method="dictionary")
     else:
         original_windows = create_windows_english(original_text, window_size, window_size // 2)
         original_sentiment_functor = SentimentFunctor()
@@ -438,11 +439,17 @@ def plot_comparison(
     ax4 = axes[1, 1]
     ax4.scatter(orig_resampled, trans_resampled, alpha=0.5, s=30)
 
-    # Add regression line
-    z = np.polyfit(orig_resampled, trans_resampled, 1)
-    p = np.poly1d(z)
-    x_line = np.linspace(min(orig_resampled), max(orig_resampled), 100)
-    ax4.plot(x_line, p(x_line), 'r-', linewidth=2, label=f'Regression (r={np.corrcoef(orig_resampled, trans_resampled)[0,1]:.3f})')
+    # Add regression line (with error handling for constant data)
+    try:
+        if np.std(orig_resampled) > 0.001 and np.std(trans_resampled) > 0.001:
+            z = np.polyfit(orig_resampled, trans_resampled, 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(min(orig_resampled), max(orig_resampled), 100)
+            corr = np.corrcoef(orig_resampled, trans_resampled)[0, 1]
+            if not np.isnan(corr):
+                ax4.plot(x_line, p(x_line), 'r-', linewidth=2, label=f'Regression (r={corr:.3f})')
+    except Exception:
+        pass  # Skip regression if data is unsuitable
 
     # Perfect correlation line
     ax4.plot([-1, 1], [-1, 1], 'k--', alpha=0.5, label='Perfect match')
