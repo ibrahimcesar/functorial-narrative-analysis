@@ -1,41 +1,51 @@
 """
-Kishōtenketsu (起承転結) Detector
+Kishōtenketsu (起承転結) Detector - Information-Geometric Approach
 
-Detects the 4-act East Asian narrative structure in trajectories.
-Unlike Western conflict-driven narrative, kishōtenketsu creates
-tension through juxtaposition and reframing rather than conflict.
+Detects the 4-act East Asian narrative structure using information geometry
+rather than sentiment-based heuristics.
 
 The four acts:
-    起 (Ki) - Introduction: Establish setting and characters
-    承 (Shō) - Development: Expand on the introduction
-    転 (Ten) - Twist/Turn: Unexpected element, change of perspective
-    結 (Ketsu) - Reconciliation: Tie together, resolve through reframing
+    起 (Ki) - Introduction: Low information rate, establishing baseline
+    承 (Shō) - Development: Gradual information accumulation, stable trajectory
+    転 (Ten) - Twist/Turn: Information-theoretic reframing (KL spike, curvature anomaly)
+    結 (Ketsu) - Reconciliation: Entropy compression, new understanding
 
-Key characteristics:
-- No central conflict required
-- Tension from juxtaposition, not opposition
-- The "ten" (twist) reframes what came before
-- Resolution through understanding, not victory
+Key insight: Kishōtenketsu's "twist" is NOT a dramatic conflict peak but an
+INFORMATION-THEORETIC REFRAMING - the narrative suddenly asks the reader to
+reconsider prior information from a new perspective.
 
-Trajectory signatures:
-- Flat or gradual sentiment through Ki-Shō (acts 1-2)
-- Spike or sudden change at Ten (act 3)
-- Return to baseline or new equilibrium at Ketsu (act 4)
+Information-Geometric Signatures:
+    Ki-Shō (起承):
+        - Low curvature (smooth trajectory)
+        - Stable surprisal variance
+        - Gradual entropy accumulation
 
-Contrast with Harmon Circle:
-- Harmon: descent → nadir → ascent (valley shape)
-- Kishōtenketsu: plateau → spike → resolution (spike shape)
+    Ten (転):
+        - KL divergence spike (belief update)
+        - Curvature anomaly (trajectory bends sharply)
+        - NOT necessarily a sentiment extreme
+        - Occurs typically 50-75% through narrative
+
+    Ketsu (結):
+        - Entropy compression (uncertainty reduction)
+        - Return toward lower curvature
+        - Information integration/synthesis
+
+Contrast with Western Climax:
+    - Western: tension builds → climax (extreme) → resolution
+    - Kishōtenketsu: stability → reframing (perspective shift) → synthesis
 """
 
 import json
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from scipy.ndimage import gaussian_filter1d
-from scipy.stats import zscore
+from scipy.stats import zscore, entropy
+from scipy.special import rel_entr
 import click
 from rich.console import Console
 from rich.table import Table
@@ -45,50 +55,58 @@ console = Console()
 
 @dataclass
 class KishotenketsuStage:
-    """Represents a stage in kishōtenketsu."""
+    """Represents a stage in kishōtenketsu with information-geometric properties."""
     name_jp: str
     name_en: str
     description: str
-    expected_pattern: str  # "stable", "spike", "resolution"
+    info_signature: str  # Information-geometric signature
 
 
 KISHOTENKETSU_STAGES = [
-    KishotenketsuStage("起", "Ki (Introduction)",
-                       "Establish setting, characters, situation", "stable"),
-    KishotenketsuStage("承", "Shō (Development)",
-                       "Expand and develop the introduction", "stable"),
-    KishotenketsuStage("転", "Ten (Twist)",
-                       "Unexpected element, change of perspective", "spike"),
-    KishotenketsuStage("結", "Ketsu (Reconciliation)",
-                       "Tie together, new understanding", "resolution"),
+    KishotenketsuStage(
+        "起", "Ki (Introduction)",
+        "Establish baseline information state",
+        "low_curvature, baseline_entropy"
+    ),
+    KishotenketsuStage(
+        "承", "Shō (Development)",
+        "Gradual information accumulation",
+        "stable_curvature, gradual_entropy_increase"
+    ),
+    KishotenketsuStage(
+        "転", "Ten (Twist)",
+        "Information-theoretic reframing",
+        "kl_spike, curvature_anomaly"
+    ),
+    KishotenketsuStage(
+        "結", "Ketsu (Reconciliation)",
+        "Information synthesis and compression",
+        "entropy_compression, curvature_descent"
+    ),
 ]
 
 
 @dataclass
 class KishotenketsuMatch:
-    """Result of matching a trajectory to kishōtenketsu."""
+    """Result of information-geometric kishōtenketsu detection."""
     trajectory_id: str
     title: str
     conformance_score: float
-    stage_boundaries: List[float]  # Normalized positions [0,1] for act boundaries
-    stage_values: List[float]  # Mean trajectory values for each act
-    ten_position: float  # Position of the twist (0-1)
-    ten_magnitude: float  # How strong the twist is
-    has_twist: bool  # Whether a clear twist was detected
-    twist_type: str  # "spike_up", "spike_down", "shift", "none"
-    pattern_type: str  # "classic", "subtle", "western_hybrid", "non_conforming"
-    stability_score: float  # How stable Ki-Shō are
+    stage_boundaries: List[float]  # Normalized positions [0,1]
+    stage_scores: Dict[str, float]  # Score for each stage
+    ten_position: float  # Position of reframing (0-1)
+    ten_strength: float  # KL divergence at Ten
+    ten_type: str  # "kl_spike", "curvature_anomaly", "perspective_shift", "none"
+    ki_sho_smoothness: float  # How smooth/stable Ki-Shō is
+    ketsu_compression: float  # Entropy compression in Ketsu
+    pattern_type: str  # Classification
+    info_geo_features: Dict[str, float]  # Raw geometric features
     notes: List[str] = field(default_factory=list)
 
     @property
     def is_kishotenketsu(self) -> bool:
         """Whether this text conforms to kishōtenketsu structure."""
-        return self.pattern_type in ("classic_kishotenketsu", "subtle_kishotenketsu")
-
-    @property
-    def twist_strength(self) -> float:
-        """Alias for ten_magnitude for consistency."""
-        return self.ten_magnitude
+        return self.pattern_type in ("classic_kishotenketsu", "subtle_kishotenketsu", "modern_kishotenketsu")
 
     def to_dict(self) -> dict:
         return {
@@ -96,372 +114,645 @@ class KishotenketsuMatch:
             "title": self.title,
             "conformance_score": self.conformance_score,
             "stage_boundaries": self.stage_boundaries,
-            "stage_values": self.stage_values,
+            "stage_scores": self.stage_scores,
             "ten_position": self.ten_position,
-            "ten_magnitude": self.ten_magnitude,
-            "has_twist": self.has_twist,
-            "twist_type": self.twist_type,
+            "ten_strength": self.ten_strength,
+            "ten_type": self.ten_type,
+            "ki_sho_smoothness": self.ki_sho_smoothness,
+            "ketsu_compression": self.ketsu_compression,
             "pattern_type": self.pattern_type,
-            "stability_score": self.stability_score,
+            "info_geo_features": self.info_geo_features,
             "notes": self.notes,
         }
 
 
 class KishotenketsuDetector:
     """
-    Detects Kishōtenketsu (起承転結) structure in narrative trajectories.
+    Information-Geometric Kishōtenketsu Detector.
 
-    The detector identifies:
-    1. Stable introduction/development (Ki-Shō)
-    2. A twist or perspective shift (Ten)
-    3. Resolution/reconciliation (Ketsu)
+    Uses surprisal trajectories, KL divergence, and curvature analysis
+    to identify the four-act structure characteristic of East Asian narrative.
 
-    Unlike Harmon Circle which looks for descent-ascent,
-    this looks for stability-spike-resolution patterns.
+    Key principles:
+    1. Ki-Shō should show low curvature (smooth information flow)
+    2. Ten is detected by KL divergence spike OR curvature anomaly
+    3. Ketsu shows entropy compression (new understanding)
+    4. Unlike Western climax, Ten need not be an emotional extreme
     """
 
     def __init__(
         self,
-        smooth_sigma: float = 3.0,
-        spike_threshold: float = 1.5,  # Z-score threshold for twist detection
+        smooth_sigma: float = 2.0,
+        kl_threshold: float = 0.5,  # Threshold for KL spike detection
+        curvature_threshold_percentile: float = 85,  # Percentile for curvature anomaly
+        window_size: int = 50,  # Window for local statistics
     ):
-        """
-        Initialize detector.
-
-        Args:
-            smooth_sigma: Gaussian smoothing for preprocessing
-            spike_threshold: Z-score threshold for detecting the Ten (twist)
-        """
         self.smooth_sigma = smooth_sigma
-        self.spike_threshold = spike_threshold
+        self.kl_threshold = kl_threshold
+        self.curvature_threshold_percentile = curvature_threshold_percentile
+        self.window_size = window_size
         self.stages = KISHOTENKETSU_STAGES
 
-    def _preprocess_trajectory(self, values: np.ndarray) -> np.ndarray:
-        """Smooth and normalize trajectory."""
-        smoothed = gaussian_filter1d(values, sigma=self.smooth_sigma)
-        min_val, max_val = smoothed.min(), smoothed.max()
-        if max_val - min_val > 1e-8:
-            normalized = (smoothed - min_val) / (max_val - min_val)
-        else:
-            normalized = np.full_like(smoothed, 0.5)
-        return normalized
+    def _compute_local_entropy(self, values: np.ndarray, window: int = 20) -> np.ndarray:
+        """Compute local entropy using sliding window histogram."""
+        n = len(values)
+        entropies = np.zeros(n)
 
-    def _find_twist_point(self, trajectory: np.ndarray) -> Tuple[int, float, str]:
+        for i in range(n):
+            start = max(0, i - window // 2)
+            end = min(n, i + window // 2)
+            local = values[start:end]
+
+            if len(local) < 3:
+                entropies[i] = 0
+                continue
+
+            # Compute histogram-based entropy
+            hist, _ = np.histogram(local, bins=min(10, len(local) // 2 + 1), density=True)
+            hist = hist[hist > 0]  # Remove zeros
+            entropies[i] = entropy(hist)
+
+        return entropies
+
+    def _compute_kl_trajectory(self, values: np.ndarray, n_states: int = 20) -> np.ndarray:
         """
-        Find the Ten (twist) point in the trajectory.
+        Compute KL divergence trajectory between consecutive windows.
 
-        The twist is characterized by:
-        - A sudden change in value
-        - A local extremum (peak or valley)
-        - High derivative magnitude
+        High KL = large belief update = potential reframing point.
+        """
+        n = len(values)
+        window = max(5, n // n_states)
+        kl_values = []
+
+        for i in range(0, n - window, window // 2):
+            # Current window
+            curr = values[i:i + window]
+            # Next window
+            next_start = min(i + window // 2, n - window)
+            next_window = values[next_start:next_start + window]
+
+            if len(curr) < 3 or len(next_window) < 3:
+                kl_values.append(0)
+                continue
+
+            # Compute histograms
+            bins = np.linspace(min(curr.min(), next_window.min()),
+                              max(curr.max(), next_window.max()), 15)
+
+            p, _ = np.histogram(curr, bins=bins, density=True)
+            q, _ = np.histogram(next_window, bins=bins, density=True)
+
+            # Add small epsilon to avoid division by zero
+            p = p + 1e-10
+            q = q + 1e-10
+            p = p / p.sum()
+            q = q / q.sum()
+
+            # Symmetric KL divergence
+            kl = 0.5 * (np.sum(rel_entr(p, q)) + np.sum(rel_entr(q, p)))
+            kl_values.append(kl)
+
+        # Interpolate to full length
+        if len(kl_values) < 2:
+            return np.zeros(n)
+
+        kl_positions = np.linspace(0, 1, len(kl_values))
+        full_positions = np.linspace(0, 1, n)
+        return np.interp(full_positions, kl_positions, kl_values)
+
+    def _compute_curvature(self, values: np.ndarray) -> np.ndarray:
+        """Compute discrete curvature of trajectory."""
+        if len(values) < 5:
+            return np.zeros(len(values))
+
+        # Smooth first
+        smoothed = gaussian_filter1d(values, sigma=self.smooth_sigma)
+
+        # First and second derivatives
+        dx = np.gradient(smoothed)
+        ddx = np.gradient(dx)
+
+        # Curvature = |d²x| / (1 + (dx)²)^(3/2)
+        curvature = np.abs(ddx) / (1 + dx**2)**1.5
+
+        return curvature
+
+    def _find_ten_point(
+        self,
+        values: np.ndarray,
+        kl_trajectory: np.ndarray,
+        curvature: np.ndarray
+    ) -> Tuple[int, float, str]:
+        """
+        Find the Ten (転) point - the information-theoretic reframing.
+
+        The Ten is characterized by:
+        1. KL divergence spike (belief update) OR
+        2. Curvature anomaly (trajectory bends) OR
+        3. Both (strongest signal)
+
+        Typically occurs 50-75% through narrative (not too early, not at end).
 
         Returns:
-            twist_idx: Index of twist point
-            magnitude: Strength of the twist (z-score)
-            twist_type: "spike_up", "spike_down", "shift", or "none"
+            ten_idx: Index of Ten point
+            strength: Strength of the reframing signal
+            ten_type: Type of Ten detected
         """
-        n = len(trajectory)
+        n = len(values)
 
-        # Compute derivative (rate of change)
-        derivative = np.gradient(trajectory)
-        derivative_z = zscore(np.abs(derivative))
+        # Focus on 40-80% of narrative (typical Ten region)
+        search_start = int(0.4 * n)
+        search_end = int(0.8 * n)
 
-        # Find peaks in derivative magnitude (sudden changes)
-        peaks, properties = find_peaks(
-            np.abs(derivative),
-            height=np.std(derivative) * 0.5,
-            distance=n // 8,
-        )
+        if search_end <= search_start:
+            search_start = int(0.3 * n)
+            search_end = int(0.9 * n)
 
-        if len(peaks) == 0:
-            # No clear twist - check for gradual shift
-            first_half = np.mean(trajectory[:n//2])
-            second_half = np.mean(trajectory[n//2:])
-            shift = abs(second_half - first_half)
+        # 1. Find KL spikes
+        kl_region = kl_trajectory[search_start:search_end]
+        kl_threshold = np.percentile(kl_trajectory, 75)
 
-            if shift > 0.15:
-                return n // 2, shift * 3, "shift"
-            return n // 2, 0.0, "none"
+        kl_peaks = []
+        if len(kl_region) > 3:
+            try:
+                peaks, props = find_peaks(
+                    kl_region,
+                    height=kl_threshold,
+                    distance=max(1, len(kl_region) // 5)
+                )
+                kl_peaks = [(p + search_start, kl_trajectory[p + search_start]) for p in peaks]
+            except ValueError:
+                pass
 
-        # Find the most significant change (highest derivative)
-        # Prefer peaks in the second or third quarter (typical Ten position)
-        scores = []
-        for peak in peaks:
-            position_score = 1.0
-            # Prefer middle-to-late position (25%-75% of narrative)
-            if 0.25 < peak / n < 0.75:
-                position_score = 1.5
-            if 0.4 < peak / n < 0.6:
-                position_score = 2.0
+        # 2. Find curvature anomalies
+        curv_region = curvature[search_start:search_end]
+        curv_threshold = np.percentile(curvature, self.curvature_threshold_percentile)
 
-            magnitude = np.abs(derivative[peak])
-            scores.append((peak, magnitude * position_score, derivative[peak]))
+        curv_peaks = []
+        if len(curv_region) > 3:
+            try:
+                peaks, props = find_peaks(
+                    curv_region,
+                    height=curv_threshold,
+                    distance=max(1, len(curv_region) // 5)
+                )
+                curv_peaks = [(p + search_start, curvature[p + search_start]) for p in peaks]
+            except ValueError:
+                pass
 
-        # Select best twist point
-        best_peak, _, deriv_value = max(scores, key=lambda x: x[1])
+        # 3. Score candidates
+        candidates = []
 
-        # Determine twist type
-        if deriv_value > 0:
-            twist_type = "spike_up"
-        else:
-            twist_type = "spike_down"
+        # KL spike candidates
+        for idx, kl_val in kl_peaks:
+            # Position score: prefer 50-70% position
+            pos = idx / n
+            pos_score = 1.0 - abs(pos - 0.6) * 2
+            pos_score = max(0.2, pos_score)
 
-        # Calculate magnitude as z-score of the change
-        local_window = max(1, n // 10)
-        local_mean = np.mean(trajectory[max(0, best_peak-local_window):min(n, best_peak+local_window)])
-        local_std = np.std(trajectory[max(0, best_peak-local_window):min(n, best_peak+local_window)])
+            # Check if curvature is also elevated here
+            local_curv = curvature[max(0, idx-5):min(n, idx+5)].mean()
+            curv_bonus = 1.0 + min(1.0, local_curv / (curv_threshold + 1e-8))
 
-        if local_std > 0:
-            magnitude = abs(trajectory[best_peak] - local_mean) / local_std
-        else:
-            magnitude = 0.0
+            score = kl_val * pos_score * curv_bonus
+            candidates.append((idx, score, kl_val, "kl_spike"))
 
-        return best_peak, magnitude, twist_type
+        # Curvature anomaly candidates
+        for idx, curv_val in curv_peaks:
+            pos = idx / n
+            pos_score = 1.0 - abs(pos - 0.6) * 2
+            pos_score = max(0.2, pos_score)
 
-    def _compute_stability(self, trajectory: np.ndarray, end_idx: int) -> float:
+            # Check if KL is also elevated
+            local_kl = kl_trajectory[max(0, idx-5):min(n, idx+5)].mean()
+            kl_bonus = 1.0 + min(1.0, local_kl / (kl_threshold + 1e-8))
+
+            score = curv_val * pos_score * kl_bonus * 0.5  # Weight curvature less than KL
+            candidates.append((idx, score, curv_val, "curvature_anomaly"))
+
+        if not candidates:
+            # Fallback: find maximum KL in search region
+            if len(kl_region) > 0:
+                max_idx = np.argmax(kl_region) + search_start
+                max_kl = kl_trajectory[max_idx]
+                if max_kl > self.kl_threshold * 0.5:
+                    return max_idx, max_kl, "perspective_shift"
+
+            # No clear Ten found
+            return int(0.65 * n), 0.0, "none"
+
+        # Select best candidate
+        best = max(candidates, key=lambda x: x[1])
+        return best[0], best[2], best[3]
+
+    def _compute_ki_sho_smoothness(
+        self,
+        values: np.ndarray,
+        curvature: np.ndarray,
+        ten_idx: int
+    ) -> float:
         """
-        Compute stability score for Ki-Shō section.
+        Compute smoothness of Ki-Shō section (before Ten).
 
-        High stability = consistent values, low variation
-        Low stability = fluctuating values (more Western-style)
+        Kishōtenketsu Ki-Shō should have LOW curvature (smooth development).
+        High smoothness = low curvature variance = kishōtenketsu-like.
         """
-        if end_idx < 2:
+        # Ki-Shō is everything before Ten
+        ki_sho_end = min(ten_idx, int(len(values) * 0.6))
+
+        if ki_sho_end < 5:
             return 0.5
 
-        section = trajectory[:end_idx]
-        cv = np.std(section) / (np.mean(section) + 1e-8)
+        ki_sho_curv = curvature[:ki_sho_end]
 
-        # Convert to 0-1 score where 1 = very stable
-        stability = 1.0 / (1.0 + cv * 5)
+        # Smoothness = inverse of curvature magnitude and variance
+        mean_curv = np.mean(ki_sho_curv)
+        std_curv = np.std(ki_sho_curv)
 
-        return stability
+        # Normalize against full trajectory
+        full_mean = np.mean(curvature)
 
-    def _map_to_stages(
-        self,
-        trajectory: np.ndarray,
-        twist_idx: int
-    ) -> Tuple[List[float], List[float]]:
-        """
-        Map trajectory to 4 kishōtenketsu stages.
-
-        Args:
-            trajectory: Processed trajectory
-            twist_idx: Index of the twist point
-
-        Returns:
-            stage_boundaries: Normalized positions for act boundaries
-            stage_values: Mean values for each act
-        """
-        n = len(trajectory)
-
-        # Standard division: Ki=25%, Shō=25%, Ten=25%, Ketsu=25%
-        # But adjust based on twist position
-        ten_pos = twist_idx / n
-
-        # Adjust boundaries around the twist
-        if 0.3 < ten_pos < 0.7:
-            # Twist is well-positioned - distribute evenly around it
-            ki_end = ten_pos * 0.5
-            sho_end = ten_pos
-            ten_end = ten_pos + (1 - ten_pos) * 0.4
+        # Lower curvature in Ki-Shō relative to full = higher smoothness
+        if full_mean > 0:
+            relative_smoothness = 1.0 - (mean_curv / (full_mean + 1e-8))
         else:
-            # Twist is early/late - use standard quarters
-            ki_end = 0.25
-            sho_end = 0.50
-            ten_end = 0.75
+            relative_smoothness = 0.5
 
-        stage_boundaries = [0.0, ki_end, sho_end, ten_end, 1.0]
+        # Low variance = more consistent smoothness
+        cv = std_curv / (mean_curv + 1e-8)
+        consistency = 1.0 / (1.0 + cv)
 
-        # Compute mean values for each stage
-        stage_values = []
-        for i in range(4):
-            start_idx = int(stage_boundaries[i] * n)
-            end_idx = int(stage_boundaries[i + 1] * n)
-            if end_idx > start_idx:
-                stage_values.append(float(np.mean(trajectory[start_idx:end_idx])))
-            else:
-                stage_values.append(0.5)
+        smoothness = 0.6 * max(0, relative_smoothness) + 0.4 * consistency
+        return np.clip(smoothness, 0, 1)
 
-        return stage_boundaries[1:], stage_values
-
-    def _compute_conformance(
+    def _compute_ketsu_compression(
         self,
-        trajectory: np.ndarray,
-        twist_idx: int,
-        twist_magnitude: float,
-        twist_type: str,
-        stability_score: float,
-        stage_values: List[float]
-    ) -> Tuple[float, str, List[str]]:
+        values: np.ndarray,
+        local_entropy: np.ndarray,
+        ten_idx: int
+    ) -> float:
         """
-        Compute how well trajectory conforms to kishōtenketsu.
+        Compute entropy compression in Ketsu (after Ten).
+
+        Kishōtenketsu Ketsu should show entropy DECREASE
+        (uncertainty reduction, new understanding).
+        """
+        n = len(values)
+        ketsu_start = ten_idx + int(0.1 * n)  # After Ten
+
+        if ketsu_start >= n - 5:
+            return 0.0
+
+        # Compare entropy at Ten vs end
+        ten_entropy = np.mean(local_entropy[max(0, ten_idx-5):min(n, ten_idx+5)])
+        ketsu_entropy = np.mean(local_entropy[ketsu_start:])
+
+        # Compression = decrease in entropy
+        if ten_entropy > 0:
+            compression = (ten_entropy - ketsu_entropy) / ten_entropy
+        else:
+            compression = 0.0
+
+        return np.clip(compression, -1, 1)
+
+    def _classify_pattern(
+        self,
+        ki_sho_smoothness: float,
+        ten_strength: float,
+        ten_type: str,
+        ketsu_compression: float,
+        ten_position: float,
+        curvature_ki_sho: float = 0.0,
+        curvature_ketsu: float = 0.0,
+    ) -> Tuple[str, Dict[str, float], List[str]]:
+        """
+        Classify the narrative pattern based on information-geometric features.
+
+        Key distinction between Kishōtenketsu and Western narrative:
+        - Western: Building tension (rising curvature) → climax → quick resolution
+        - Kishōtenketsu: Stable development → reframing → synthesis
+
+        The critical markers are:
+        1. Curvature RATIO: Ki-Shō curvature should be LOWER than Ketsu (reframing adds complexity)
+        2. Ten POSITION: Ideal at 55-70% (later than Western midpoint climax)
+        3. Ketsu COMPRESSION: Should show information integration (positive compression)
+        4. Ten NATURE: KL spike (belief update) vs curvature spike (dramatic conflict)
 
         Returns:
-            conformance_score: 0-1 measure of fit
-            pattern_type: classification
-            notes: observations
+            pattern_type: Classification
+            stage_scores: Score for each stage
+            notes: Observations
         """
         notes = []
-        n = len(trajectory)
 
-        # 1. Stability of Ki-Shō (first half should be stable)
-        ki_sho_stability = stability_score
-        if ki_sho_stability > 0.6:
-            notes.append("Stable Ki-Shō section")
-        elif ki_sho_stability < 0.3:
-            notes.append("Unstable Ki-Shō (Western-style conflict)")
+        # Stage scores
+        stage_scores = {
+            "ki": 0.0,
+            "sho": 0.0,
+            "ten": 0.0,
+            "ketsu": 0.0,
+        }
 
-        # 2. Presence and strength of Ten (twist)
-        has_twist = twist_magnitude > self.spike_threshold
-        if has_twist:
-            notes.append(f"Clear Ten (twist) detected at {twist_idx/n:.0%}")
+        # === Ki score: Smooth, stable introduction ===
+        stage_scores["ki"] = ki_sho_smoothness * 0.8
+        if ki_sho_smoothness > 0.5:
+            notes.append("Smooth Ki (introduction)")
+        elif ki_sho_smoothness > 0.35:
+            notes.append("Moderately smooth Ki")
+
+        # === Shō score: Continued stability, gradual development ===
+        stage_scores["sho"] = ki_sho_smoothness * 0.7
+        if ki_sho_smoothness > 0.4:
+            notes.append("Stable Shō (development)")
+
+        # === Ten score: Reframing strength and position ===
+        ten_score = 0.0
+        if ten_type != "none":
+            # Position bonus: 55-70% is ideal for kishōtenketsu
+            # Western climax typically at 40-50%
+            if 0.55 <= ten_position <= 0.72:
+                pos_bonus = 1.0  # Ideal kishōtenketsu position
+                notes.append(f"Ten at ideal position ({ten_position:.0%})")
+            elif 0.50 <= ten_position <= 0.75:
+                pos_bonus = 0.8
+            elif 0.40 <= ten_position <= 0.55:
+                pos_bonus = 0.5  # Early = more Western-like
+                notes.append(f"Ten early ({ten_position:.0%}) - Western-like timing")
+            else:
+                pos_bonus = 0.3
+
+            # Type bonus: KL spike = perspective shift (more kishōtenketsu)
+            # Curvature spike = dramatic turn (more Western)
+            if ten_type == "kl_spike":
+                type_bonus = 1.0
+                notes.append("Ten via belief update (KL spike)")
+            elif ten_type == "perspective_shift":
+                type_bonus = 0.8
+                notes.append("Ten via perspective shift")
+            else:  # curvature_anomaly
+                type_bonus = 0.6
+                notes.append("Ten via dramatic turn (curvature)")
+
+            # Scale ten_strength (typically 5-15 range)
+            strength_normalized = min(1.0, ten_strength / 12.0)
+            ten_score = strength_normalized * pos_bonus * type_bonus
+
         else:
-            notes.append("Weak or absent Ten (twist)")
+            notes.append("Weak or absent Ten")
+            ten_score = 0.1
 
-        # 3. Resolution pattern - Ketsu should return toward baseline
-        ketsu_start = int(0.75 * n)
-        ketsu_section = trajectory[ketsu_start:]
-        ki_sho_mean = np.mean(trajectory[:int(0.5 * n)])
-        ketsu_mean = np.mean(ketsu_section)
+        stage_scores["ten"] = ten_score
 
-        # Ketsu should be closer to Ki-Shō than the twist extreme
-        twist_value = trajectory[twist_idx]
-        resolution_distance = abs(ketsu_mean - ki_sho_mean)
-        twist_distance = abs(twist_value - ki_sho_mean)
-
-        has_resolution = resolution_distance < twist_distance * 0.7
-        if has_resolution:
-            notes.append("Clear Ketsu (reconciliation)")
+        # === Ketsu score: Information synthesis/compression ===
+        if ketsu_compression > 0.15:
+            stage_scores["ketsu"] = min(1.0, ketsu_compression * 3)
+            notes.append("Strong Ketsu (information synthesis)")
+        elif ketsu_compression > 0.05:
+            stage_scores["ketsu"] = ketsu_compression * 2
+            notes.append("Partial Ketsu resolution")
+        elif ketsu_compression > 0:
+            stage_scores["ketsu"] = ketsu_compression
         else:
-            notes.append("Incomplete resolution")
+            stage_scores["ketsu"] = 0.05
+            notes.append("No entropy compression in Ketsu")
 
-        # 4. Compare to Harmon pattern (valley vs spike)
-        # Kishōtenketsu should NOT have strong descent-ascent
-        first_quarter = np.mean(trajectory[:n//4])
-        mid_point = np.mean(trajectory[n//4:3*n//4])
-        last_quarter = np.mean(trajectory[3*n//4:])
+        # === Curvature ratio analysis ===
+        # Kishōtenketsu: Ki-Shō curvature should be relatively LOW
+        # After Ten, curvature may increase (new understanding = new patterns)
+        if curvature_ki_sho > 0 and curvature_ketsu > 0:
+            curv_ratio = curvature_ki_sho / (curvature_ketsu + 1e-8)
+            if curv_ratio < 0.9:
+                # Ki-Shō smoother than Ketsu = kishōtenketsu pattern
+                notes.append("Curvature increases after Ten (kishōtenketsu pattern)")
+                stage_scores["ki"] *= 1.2
+                stage_scores["sho"] *= 1.2
+            elif curv_ratio > 1.2:
+                # Ki-Shō rougher than Ketsu = Western build-up pattern
+                notes.append("Curvature higher in Ki-Shō (Western build-up)")
+                stage_scores["ki"] *= 0.7
+                stage_scores["sho"] *= 0.7
 
-        is_valley = mid_point < first_quarter - 0.1 and mid_point < last_quarter - 0.1
-        if is_valley:
-            notes.append("Warning: Valley pattern (more Harmon-like)")
+        # Clamp scores
+        for k in stage_scores:
+            stage_scores[k] = np.clip(stage_scores[k], 0, 1)
 
-        # Compute score
-        stability_component = ki_sho_stability * 0.3
-        twist_component = min(1.0, twist_magnitude / 3.0) * 0.35 if has_twist else 0.0
-        resolution_component = 0.25 if has_resolution else 0.0
-        anti_valley_component = 0.1 if not is_valley else 0.0
+        # === Overall conformance ===
+        # Weight: Ki-Shō smoothness (30%), Ten quality (35%), Ketsu compression (35%)
+        conformance = (
+            stage_scores["ki"] * 0.15 +
+            stage_scores["sho"] * 0.15 +
+            stage_scores["ten"] * 0.35 +
+            stage_scores["ketsu"] * 0.35
+        )
 
-        conformance = stability_component + twist_component + resolution_component + anti_valley_component
-        conformance = max(0.0, min(1.0, conformance))
+        # === Pattern classification ===
+        # Higher thresholds to be more selective
 
-        # Classify pattern
-        if conformance > 0.6 and has_twist and ki_sho_stability > 0.4:
+        # Classic kishōtenketsu: all elements present with strong compression
+        if (conformance > 0.45 and
+            ki_sho_smoothness > 0.35 and
+            ten_type in ("kl_spike", "perspective_shift") and
+            0.55 <= ten_position <= 0.75 and
+            ketsu_compression > 0.08):
             pattern_type = "classic_kishotenketsu"
-        elif conformance > 0.4 and has_twist:
-            pattern_type = "subtle_kishotenketsu"
-        elif is_valley:
-            pattern_type = "western_hybrid"
-        elif ki_sho_stability > 0.6 and not has_twist:
-            pattern_type = "flat_narrative"
-        else:
-            pattern_type = "non_conforming"
+            notes.append("All kishōtenketsu elements present")
 
-        return conformance, pattern_type, notes
+        # Modern kishōtenketsu: good structure, weaker compression
+        elif (conformance > 0.40 and
+              ten_type in ("kl_spike", "perspective_shift") and
+              0.50 <= ten_position <= 0.75 and
+              ketsu_compression > 0.03):
+            pattern_type = "modern_kishotenketsu"
+
+        # Subtle kishōtenketsu: Ten present at right position, some compression
+        elif (ten_type != "none" and
+              0.55 <= ten_position <= 0.78 and
+              ketsu_compression > 0.01):
+            pattern_type = "subtle_kishotenketsu"
+
+        # Western conflict: early climax OR no compression OR curvature-based drama
+        elif (ten_position < 0.50 or
+              ketsu_compression <= 0 or
+              (ten_type == "curvature_anomaly" and ketsu_compression < 0.02)):
+            pattern_type = "western_conflict"
+            notes.append("Pattern suggests Western dramatic structure")
+
+        # Zuihitsu: smooth throughout, no clear structure
+        elif ten_type == "none" and ki_sho_smoothness > 0.45:
+            pattern_type = "zuihitsu"
+            notes.append("Essay-like flow without clear reframing")
+
+        # Hybrid: mixed characteristics
+        else:
+            pattern_type = "hybrid"
+            notes.append("Mixed narrative structure")
+
+        return pattern_type, stage_scores, notes
 
     def detect(
         self,
-        trajectory: np.ndarray,
+        trajectory: Union[np.ndarray, List[float]],
         trajectory_id: str = "unknown",
         title: str = "Unknown"
     ) -> KishotenketsuMatch:
         """
-        Detect kishōtenketsu structure in a trajectory.
+        Detect kishōtenketsu structure using information geometry.
 
         Args:
-            trajectory: Array of values (sentiment, entropy, etc.)
+            trajectory: Surprisal/entropy values (from SurprisalExtractor)
             trajectory_id: Identifier
-            title: Title of the work
+            title: Title of work
 
         Returns:
             KishotenketsuMatch with detection results
         """
-        processed = self._preprocess_trajectory(trajectory)
-        n = len(processed)
+        values = np.array(trajectory, dtype=float)
+        n = len(values)
 
-        # Find twist point
-        twist_idx, twist_magnitude, twist_type = self._find_twist_point(processed)
-        ten_position = twist_idx / n
+        if n < 10:
+            return KishotenketsuMatch(
+                trajectory_id=trajectory_id,
+                title=title,
+                conformance_score=0.0,
+                stage_boundaries=[0.25, 0.5, 0.75, 1.0],
+                stage_scores={"ki": 0, "sho": 0, "ten": 0, "ketsu": 0},
+                ten_position=0.5,
+                ten_strength=0.0,
+                ten_type="none",
+                ki_sho_smoothness=0.0,
+                ketsu_compression=0.0,
+                pattern_type="insufficient_data",
+                info_geo_features={},
+                notes=["Trajectory too short for analysis"],
+            )
 
-        # Compute Ki-Shō stability
-        ki_sho_end = int(min(twist_idx, n // 2))
-        stability_score = self._compute_stability(processed, ki_sho_end)
+        # Compute information-geometric features
+        curvature = self._compute_curvature(values)
+        kl_trajectory = self._compute_kl_trajectory(values)
+        local_entropy = self._compute_local_entropy(values)
 
-        # Map to stages
-        stage_boundaries, stage_values = self._map_to_stages(processed, twist_idx)
+        # Find Ten (reframing point)
+        ten_idx, ten_strength, ten_type = self._find_ten_point(
+            values, kl_trajectory, curvature
+        )
+        ten_position = ten_idx / n
 
-        # Compute conformance
-        conformance, pattern_type, notes = self._compute_conformance(
-            processed, twist_idx, twist_magnitude, twist_type,
-            stability_score, stage_values
+        # Compute Ki-Shō smoothness
+        ki_sho_smoothness = self._compute_ki_sho_smoothness(values, curvature, ten_idx)
+
+        # Compute Ketsu compression
+        ketsu_compression = self._compute_ketsu_compression(values, local_entropy, ten_idx)
+
+        # Compute curvature in different regions for classification
+        curvature_ki_sho = float(np.mean(curvature[:ten_idx])) if ten_idx > 0 else 0.0
+        curvature_ketsu = float(np.mean(curvature[ten_idx:])) if ten_idx < n else 0.0
+
+        # Classify pattern
+        pattern_type, stage_scores, notes = self._classify_pattern(
+            ki_sho_smoothness, ten_strength, ten_type, ketsu_compression, ten_position,
+            curvature_ki_sho, curvature_ketsu
         )
 
-        has_twist = twist_magnitude > self.spike_threshold
+        # Compute overall conformance
+        conformance = (
+            stage_scores["ki"] * 0.2 +
+            stage_scores["sho"] * 0.2 +
+            stage_scores["ten"] * 0.35 +
+            stage_scores["ketsu"] * 0.25
+        )
+
+        # Compute stage boundaries based on Ten position
+        if 0.4 < ten_position < 0.75:
+            ki_end = ten_position * 0.4
+            sho_end = ten_position
+            ten_end = ten_position + (1 - ten_position) * 0.5
+        else:
+            ki_end = 0.25
+            sho_end = 0.5
+            ten_end = 0.75
+
+        stage_boundaries = [ki_end, sho_end, ten_end, 1.0]
+
+        # Collect info-geo features
+        info_geo_features = {
+            "mean_curvature": float(np.mean(curvature)),
+            "max_curvature": float(np.max(curvature)),
+            "mean_kl": float(np.mean(kl_trajectory)),
+            "max_kl": float(np.max(kl_trajectory)),
+            "entropy_start": float(np.mean(local_entropy[:n//4])),
+            "entropy_end": float(np.mean(local_entropy[-n//4:])),
+            "curvature_ki_sho": float(np.mean(curvature[:ten_idx])),
+            "curvature_ketsu": float(np.mean(curvature[ten_idx:])),
+        }
 
         return KishotenketsuMatch(
             trajectory_id=trajectory_id,
             title=title,
             conformance_score=conformance,
             stage_boundaries=stage_boundaries,
-            stage_values=stage_values,
+            stage_scores=stage_scores,
             ten_position=ten_position,
-            ten_magnitude=twist_magnitude,
-            has_twist=has_twist,
-            twist_type=twist_type,
+            ten_strength=ten_strength,
+            ten_type=ten_type,
+            ki_sho_smoothness=ki_sho_smoothness,
+            ketsu_compression=ketsu_compression,
             pattern_type=pattern_type,
-            stability_score=stability_score,
+            info_geo_features=info_geo_features,
             notes=notes,
         )
 
 
 def analyze_corpus(
-    trajectories_dir: Path,
+    texts_dir: Path,
     output_dir: Path,
-    trajectory_suffix: str = "_sentiment.json"
-):
+) -> List[KishotenketsuMatch]:
     """
-    Analyze a corpus for kishōtenketsu conformance.
+    Analyze a corpus for kishōtenketsu using information geometry.
 
     Args:
-        trajectories_dir: Directory containing trajectory JSON files
+        texts_dir: Directory containing text JSON files
         output_dir: Output directory for results
-        trajectory_suffix: Suffix for trajectory files
     """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    from geometry.surprisal import SurprisalExtractor
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     detector = KishotenketsuDetector()
+    surprisal_ext = SurprisalExtractor(method='entropy', window_size=200)
 
-    # Load trajectories
-    traj_files = list(Path(trajectories_dir).glob(f"*{trajectory_suffix}"))
-    traj_files = [f for f in traj_files if f.name != "manifest.json"]
-
-    console.print(f"[blue]Analyzing {len(traj_files)} trajectories for Kishōtenketsu...[/blue]")
+    # Load texts
+    text_files = list(Path(texts_dir).glob("*.json"))
+    console.print(f"[blue]Analyzing {len(text_files)} texts for Kishōtenketsu...[/blue]")
 
     results = []
     pattern_counts = {}
 
-    for traj_file in traj_files:
-        with open(traj_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    for text_file in text_files:
+        try:
+            with open(text_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
 
-        values = np.array(data["values"])
-        traj_id = data["metadata"].get("source_id", traj_file.stem)
-        title = data["metadata"].get("title", "Unknown")
+            text = data.get('text', '')
+            if len(text) < 3000:
+                continue
 
-        match = detector.detect(values, traj_id, title)
-        results.append(match)
+            title = data.get('title', text_file.stem)
 
-        pattern_counts[match.pattern_type] = pattern_counts.get(match.pattern_type, 0) + 1
+            # Extract surprisal trajectory
+            trajectory = surprisal_ext.extract(text[:100000])
+
+            # Detect kishōtenketsu
+            match = detector.detect(trajectory.values, text_file.stem, title)
+            results.append(match)
+
+            pattern_counts[match.pattern_type] = pattern_counts.get(match.pattern_type, 0) + 1
+
+        except Exception as e:
+            console.print(f"[red]Error processing {text_file.name}: {e}[/red]")
 
     # Sort by conformance
     results.sort(key=lambda x: x.conformance_score, reverse=True)
@@ -470,9 +761,8 @@ def analyze_corpus(
     results_data = {
         "total_texts": len(results),
         "pattern_distribution": pattern_counts,
-        "mean_conformance": float(np.mean([r.conformance_score for r in results])),
-        "mean_stability": float(np.mean([r.stability_score for r in results])),
-        "texts_with_twist": sum(1 for r in results if r.has_twist),
+        "mean_conformance": float(np.mean([r.conformance_score for r in results])) if results else 0,
+        "kishotenketsu_count": sum(1 for r in results if r.is_kishotenketsu),
         "results": [r.to_dict() for r in results],
     }
 
@@ -480,20 +770,21 @@ def analyze_corpus(
         json.dump(results_data, f, indent=2, ensure_ascii=False)
 
     # Print summary
-    table = Table(title="Kishōtenketsu Analysis Results")
+    table = Table(title="Kishōtenketsu Analysis (Information-Geometric)")
     table.add_column("Pattern Type", style="cyan")
     table.add_column("Count", justify="right")
     table.add_column("Percentage", justify="right")
 
     for pattern, count in sorted(pattern_counts.items(), key=lambda x: -x[1]):
-        pct = 100 * count / len(results)
+        pct = 100 * count / len(results) if results else 0
         table.add_row(pattern, str(count), f"{pct:.1f}%")
 
     console.print(table)
 
-    console.print(f"\n[bold]Top 5 Kishōtenketsu Conforming Texts:[/bold]")
+    console.print(f"\n[bold]Top Kishōtenketsu Conforming Texts:[/bold]")
     for match in results[:5]:
         console.print(f"  {match.conformance_score:.2f}: {match.title} ({match.pattern_type})")
+        console.print(f"         Ten: {match.ten_type} at {match.ten_position:.0%}, Smoothness: {match.ki_sho_smoothness:.2f}")
 
     console.print(f"\n[green]✓ Results saved to {output_dir}[/green]")
 
@@ -503,10 +794,9 @@ def analyze_corpus(
 @click.command()
 @click.option('--input', '-i', 'input_dir', required=True, type=click.Path(exists=True))
 @click.option('--output', '-o', 'output_dir', required=True, type=click.Path())
-@click.option('--suffix', '-s', default='_sentiment.json', help='Trajectory file suffix')
-def main(input_dir: str, output_dir: str, suffix: str):
-    """Detect Kishōtenketsu patterns in trajectories."""
-    analyze_corpus(Path(input_dir), Path(output_dir), suffix)
+def main(input_dir: str, output_dir: str):
+    """Detect Kishōtenketsu patterns using information geometry."""
+    analyze_corpus(Path(input_dir), Path(output_dir))
 
 
 if __name__ == "__main__":

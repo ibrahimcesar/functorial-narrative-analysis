@@ -1239,6 +1239,52 @@ def cross_cultural_transfer(
 
 ---
 
+## 4.5 Information Geometry Module
+
+We have implemented an **information-geometric approach** to narrative analysis that treats stories as trajectories through statistical manifolds. This enables cross-cultural comparison because information-theoretic quantities are language-independent.
+
+### Core Components
+
+| Module | Description |
+|--------|-------------|
+| `src/geometry/surprisal.py` | Surprisal extraction using entropy estimation |
+| `src/geometry/curvature.py` | Curvature computation and shape classification |
+| `src/geometry/divergence.py` | KL divergence and belief trajectory analysis |
+
+### Shape Classification
+
+Based on empirical analysis of 125 works across 5 corpora, narratives are classified into five information-geometric shapes:
+
+| Shape | Information Signature |
+|-------|----------------------|
+| **Geodesic Tragedy** | Low curvature, decreasing entropy, smooth descent |
+| **High-Curvature Mystery** | Sustained high curvature, many peaks |
+| **Random Walk Comedy** | High variance, oscillating, mean-reverting |
+| **Compression Progress** | Steady entropy reduction |
+| **Discontinuous Twist** | Late curvature spike |
+
+### Cross-Cultural Results
+
+| Metric | Japanese | Western |
+|--------|----------|---------|
+| Mean surprisal | 5.4 | 6.3 |
+| Mean curvature | 15.8 | 70.7 |
+| KL divergence | 1.74 bits | 0.85 bits |
+
+Japanese narratives show smoother trajectories but larger belief updates—consistent with kishōtenketsu structure.
+
+### Kishōtenketsu Detector (Information-Geometric)
+
+The redesigned kishōtenketsu detector (`src/detectors/kishotenketsu.py`) uses information geometry:
+
+- **Ki-Shō**: Detected via low curvature (smooth development)
+- **Ten**: Detected via KL divergence spike (belief update) at 55-75% position
+- **Ketsu**: Detected via entropy compression (information synthesis)
+
+See [docs/information-geometry.md](docs/information-geometry.md) and [docs/kishotenketsu-detector.md](docs/kishotenketsu-detector.md) for detailed documentation.
+
+---
+
 ## 5. Expected Findings and Implications
 
 ### 5.1 Predicted Results

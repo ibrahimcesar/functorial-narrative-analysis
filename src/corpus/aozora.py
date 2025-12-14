@@ -140,36 +140,137 @@ class AozoraPipeline:
         """Load a curated list of notable works."""
         console.print("[yellow]Using curated catalog...[/yellow]")
 
-        # Curated list of well-known works with verified HTML URLs
-        # (ZIP URLs often return 404, HTML pages are more stable)
+        # Expanded curated list of Japanese literature
+        # Organized by author for easy reference
         curated = [
-            # Natsume Soseki (夏目漱石)
+            # === Natsume Soseki (夏目漱石) - 10 works ===
             ("夏目漱石", "吾輩は猫である", "https://www.aozora.gr.jp/cards/000148/files/789_14547.html"),
             ("夏目漱石", "坊っちゃん", "https://www.aozora.gr.jp/cards/000148/files/752_14964.html"),
             ("夏目漱石", "こころ", "https://www.aozora.gr.jp/cards/000148/files/773_14560.html"),
             ("夏目漱石", "三四郎", "https://www.aozora.gr.jp/cards/000148/files/794_14946.html"),
-            # Akutagawa Ryunosuke (芥川龍之介)
+            ("夏目漱石", "それから", "https://www.aozora.gr.jp/cards/000148/files/1746_15061.html"),
+            ("夏目漱石", "門", "https://www.aozora.gr.jp/cards/000148/files/783_14958.html"),
+            ("夏目漱石", "草枕", "https://www.aozora.gr.jp/cards/000148/files/776_14941.html"),
+            ("夏目漱石", "明暗", "https://www.aozora.gr.jp/cards/000148/files/780_14959.html"),
+            ("夏目漱石", "虞美人草", "https://www.aozora.gr.jp/cards/000148/files/761_14938.html"),
+            ("夏目漱石", "行人", "https://www.aozora.gr.jp/cards/000148/files/775_14957.html"),
+
+            # === Akutagawa Ryunosuke (芥川龍之介) - 15 works ===
             ("芥川龍之介", "羅生門", "https://www.aozora.gr.jp/cards/000879/files/127_15260.html"),
             ("芥川龍之介", "鼻", "https://www.aozora.gr.jp/cards/000879/files/42_15228.html"),
             ("芥川龍之介", "藪の中", "https://www.aozora.gr.jp/cards/000879/files/179_15255.html"),
             ("芥川龍之介", "河童", "https://www.aozora.gr.jp/cards/000879/files/69_14933.html"),
             ("芥川龍之介", "蜘蛛の糸", "https://www.aozora.gr.jp/cards/000879/files/92_490.html"),
-            # Dazai Osamu (太宰治)
+            ("芥川龍之介", "地獄変", "https://www.aozora.gr.jp/cards/000879/files/60_14935.html"),
+            ("芥川龍之介", "杜子春", "https://www.aozora.gr.jp/cards/000879/files/170_15144.html"),
+            ("芥川龍之介", "トロッコ", "https://www.aozora.gr.jp/cards/000879/files/43016_17447.html"),
+            ("芥川龍之介", "歯車", "https://www.aozora.gr.jp/cards/000879/files/42377_15461.html"),
+            ("芥川龍之介", "蜜柑", "https://www.aozora.gr.jp/cards/000879/files/99_491.html"),
+            ("芥川龍之介", "奉教人の死", "https://www.aozora.gr.jp/cards/000879/files/68_14934.html"),
+            ("芥川龍之介", "戯作三昧", "https://www.aozora.gr.jp/cards/000879/files/124_15257.html"),
+            ("芥川龍之介", "或日の大石内蔵助", "https://www.aozora.gr.jp/cards/000879/files/108_15075.html"),
+            ("芥川龍之介", "舞踏会", "https://www.aozora.gr.jp/cards/000879/files/102_492.html"),
+            ("芥川龍之介", "秋", "https://www.aozora.gr.jp/cards/000879/files/123_15256.html"),
+
+            # === Dazai Osamu (太宰治) - 10 works ===
             ("太宰治", "人間失格", "https://www.aozora.gr.jp/cards/000035/files/301_14912.html"),
             ("太宰治", "走れメロス", "https://www.aozora.gr.jp/cards/000035/files/1567_14913.html"),
-            # Miyazawa Kenji (宮沢賢治)
+            ("太宰治", "斜陽", "https://www.aozora.gr.jp/cards/000035/files/1565_8559.html"),
+            ("太宰治", "津軽", "https://www.aozora.gr.jp/cards/000035/files/2282_15074.html"),
+            ("太宰治", "ヴィヨンの妻", "https://www.aozora.gr.jp/cards/000035/files/2253_13081.html"),
+            ("太宰治", "富嶽百景", "https://www.aozora.gr.jp/cards/000035/files/270_14914.html"),
+            ("太宰治", "女生徒", "https://www.aozora.gr.jp/cards/000035/files/275_13903.html"),
+            ("太宰治", "お伽草紙", "https://www.aozora.gr.jp/cards/000035/files/307_14915.html"),
+            ("太宰治", "パンドラの匣", "https://www.aozora.gr.jp/cards/000035/files/1566_8558.html"),
+            ("太宰治", "グッド・バイ", "https://www.aozora.gr.jp/cards/000035/files/1563_8556.html"),
+
+            # === Miyazawa Kenji (宮沢賢治) - 8 works ===
             ("宮沢賢治", "銀河鉄道の夜", "https://www.aozora.gr.jp/cards/000081/files/456_15050.html"),
             ("宮沢賢治", "風の又三郎", "https://www.aozora.gr.jp/cards/000081/files/462_15405.html"),
             ("宮沢賢治", "セロ弾きのゴーシュ", "https://www.aozora.gr.jp/cards/000081/files/470_15407.html"),
             ("宮沢賢治", "注文の多い料理店", "https://www.aozora.gr.jp/cards/000081/files/43754_17659.html"),
-            # Nakajima Atsushi (中島敦)
-            ("中島敦", "山月記", "https://www.aozora.gr.jp/cards/000119/files/624_14544.html"),
-            # Kajii Motojiro (梶井基次郎)
-            ("梶井基次郎", "檸檬", "https://www.aozora.gr.jp/cards/000074/files/424_19826.html"),
-            # Izumi Kyoka (泉鏡花)
+            ("宮沢賢治", "よだかの星", "https://www.aozora.gr.jp/cards/000081/files/473_15406.html"),
+            ("宮沢賢治", "どんぐりと山猫", "https://www.aozora.gr.jp/cards/000081/files/44921_19093.html"),
+            ("宮沢賢治", "やまなし", "https://www.aozora.gr.jp/cards/000081/files/46605_23911.html"),
+            ("宮沢賢治", "ポラーノの広場", "https://www.aozora.gr.jp/cards/000081/files/1935_18387.html"),
+
+            # === Mori Ogai (森鷗外) - 8 works ===
+            ("森鷗外", "舞姫", "https://www.aozora.gr.jp/cards/000129/files/2078_15963.html"),
+            ("森鷗外", "高瀬舟", "https://www.aozora.gr.jp/cards/000129/files/691_15352.html"),
+            ("森鷗外", "山椒大夫", "https://www.aozora.gr.jp/cards/000129/files/689_15353.html"),
+            ("森鷗外", "雁", "https://www.aozora.gr.jp/cards/000129/files/673_15348.html"),
+            ("森鷗外", "阿部一族", "https://www.aozora.gr.jp/cards/000129/files/692_15354.html"),
+            ("森鷗外", "ヰタ・セクスアリス", "https://www.aozora.gr.jp/cards/000129/files/695_15355.html"),
+            ("森鷗外", "青年", "https://www.aozora.gr.jp/cards/000129/files/688_15347.html"),
+            ("森鷗外", "渋江抽斎", "https://www.aozora.gr.jp/cards/000129/files/694_15356.html"),
+
+            # === Tanizaki Junichiro (谷崎潤一郎) - 6 works ===
+            ("谷崎潤一郎", "痴人の愛", "https://www.aozora.gr.jp/cards/001383/files/56646_60018.html"),
+            ("谷崎潤一郎", "刺青", "https://www.aozora.gr.jp/cards/001383/files/56622_59377.html"),
+            ("谷崎潤一郎", "春琴抄", "https://www.aozora.gr.jp/cards/001383/files/56866_64227.html"),
+            ("谷崎潤一郎", "卍", "https://www.aozora.gr.jp/cards/001383/files/56649_59802.html"),
+            ("谷崎潤一郎", "秘密", "https://www.aozora.gr.jp/cards/001383/files/56619_58025.html"),
+            ("谷崎潤一郎", "蓼喰ふ虫", "https://www.aozora.gr.jp/cards/001383/files/56640_59799.html"),
+
+            # === Izumi Kyoka (泉鏡花) - 5 works ===
             ("泉鏡花", "高野聖", "https://www.aozora.gr.jp/cards/000050/files/521_19518.html"),
-            # Higuchi Ichiyo (樋口一葉)
+            ("泉鏡花", "外科室", "https://www.aozora.gr.jp/cards/000050/files/348_19545.html"),
+            ("泉鏡花", "夜行巡査", "https://www.aozora.gr.jp/cards/000050/files/4578_12623.html"),
+            ("泉鏡花", "草迷宮", "https://www.aozora.gr.jp/cards/000050/files/49669_39422.html"),
+            ("泉鏡花", "婦系図", "https://www.aozora.gr.jp/cards/000050/files/3530_10923.html"),
+
+            # === Nakajima Atsushi (中島敦) - 4 works ===
+            ("中島敦", "山月記", "https://www.aozora.gr.jp/cards/000119/files/624_14544.html"),
+            ("中島敦", "李陵", "https://www.aozora.gr.jp/cards/000119/files/621_14498.html"),
+            ("中島敦", "弟子", "https://www.aozora.gr.jp/cards/000119/files/622_14501.html"),
+            ("中島敦", "名人伝", "https://www.aozora.gr.jp/cards/000119/files/626_14497.html"),
+
+            # === Kajii Motojiro (梶井基次郎) - 3 works ===
+            ("梶井基次郎", "檸檬", "https://www.aozora.gr.jp/cards/000074/files/424_19826.html"),
+            ("梶井基次郎", "桜の樹の下には", "https://www.aozora.gr.jp/cards/000074/files/427_19793.html"),
+            ("梶井基次郎", "城のある町にて", "https://www.aozora.gr.jp/cards/000074/files/4314_14903.html"),
+
+            # === Higuchi Ichiyo (樋口一葉) - 4 works ===
             ("樋口一葉", "たけくらべ", "https://www.aozora.gr.jp/cards/000064/files/389_15253.html"),
+            ("樋口一葉", "にごりえ", "https://www.aozora.gr.jp/cards/000064/files/390_15254.html"),
+            ("樋口一葉", "大つごもり", "https://www.aozora.gr.jp/cards/000064/files/388_15252.html"),
+            ("樋口一葉", "十三夜", "https://www.aozora.gr.jp/cards/000064/files/391_20794.html"),
+
+            # === Shimazaki Toson (島崎藤村) - 4 works ===
+            ("島崎藤村", "破戒", "https://www.aozora.gr.jp/cards/000158/files/1498_26232.html"),
+            ("島崎藤村", "夜明け前", "https://www.aozora.gr.jp/cards/000158/files/1506_26077.html"),
+            ("島崎藤村", "春", "https://www.aozora.gr.jp/cards/000158/files/1501_49896.html"),
+            ("島崎藤村", "家", "https://www.aozora.gr.jp/cards/000158/files/1499_49898.html"),
+
+            # === Shiga Naoya (志賀直哉) - 5 works ===
+            ("志賀直哉", "暗夜行路", "https://www.aozora.gr.jp/cards/000023/files/241_26229.html"),
+            ("志賀直哉", "城の崎にて", "https://www.aozora.gr.jp/cards/000023/files/234_15342.html"),
+            ("志賀直哉", "小僧の神様", "https://www.aozora.gr.jp/cards/000023/files/238_18584.html"),
+            ("志賀直哉", "和解", "https://www.aozora.gr.jp/cards/000023/files/239_26094.html"),
+            ("志賀直哉", "清兵衛と瓢箪", "https://www.aozora.gr.jp/cards/000023/files/1686_26295.html"),
+
+            # === Edogawa Ranpo (江戸川乱歩) - 5 works ===
+            ("江戸川乱歩", "人間椅子", "https://www.aozora.gr.jp/cards/001779/files/56648_58218.html"),
+            ("江戸川乱歩", "D坂の殺人事件", "https://www.aozora.gr.jp/cards/001779/files/56632_57195.html"),
+            ("江戸川乱歩", "二銭銅貨", "https://www.aozora.gr.jp/cards/001779/files/56628_57191.html"),
+            ("江戸川乱歩", "屋根裏の散歩者", "https://www.aozora.gr.jp/cards/001779/files/56638_57199.html"),
+            ("江戸川乱歩", "芋虫", "https://www.aozora.gr.jp/cards/001779/files/56652_58252.html"),
+
+            # === Yokomitsu Riichi (横光利一) - 3 works ===
+            ("横光利一", "機械", "https://www.aozora.gr.jp/cards/000168/files/2159_19986.html"),
+            ("横光利一", "蠅", "https://www.aozora.gr.jp/cards/000168/files/2158_19983.html"),
+            ("横光利一", "春は馬車に乗って", "https://www.aozora.gr.jp/cards/000168/files/2152_19884.html"),
+
+            # === Ango Sakaguchi (坂口安吾) - 4 works ===
+            ("坂口安吾", "堕落論", "https://www.aozora.gr.jp/cards/001095/files/42620_21407.html"),
+            ("坂口安吾", "桜の森の満開の下", "https://www.aozora.gr.jp/cards/001095/files/42618_21410.html"),
+            ("坂口安吾", "白痴", "https://www.aozora.gr.jp/cards/001095/files/42617_21406.html"),
+            ("坂口安吾", "風博士", "https://www.aozora.gr.jp/cards/001095/files/42615_21404.html"),
+
+            # === Osamu Dazai (additional) / Nagai Kafu (永井荷風) - 3 works ===
+            ("永井荷風", "濹東綺譚", "https://www.aozora.gr.jp/cards/001341/files/49675_67451.html"),
+            ("永井荷風", "つゆのあとさき", "https://www.aozora.gr.jp/cards/001341/files/49632_36851.html"),
+            ("永井荷風", "腕くらべ", "https://www.aozora.gr.jp/cards/001341/files/55228_47045.html"),
         ]
         
         self.catalog = []
