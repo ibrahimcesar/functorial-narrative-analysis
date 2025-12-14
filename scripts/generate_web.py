@@ -367,6 +367,13 @@ def generate_index_page(narratives: List[NarrativeData], output_dir: Path):
         cult = n.cultural_prediction
         cultural_counts[cult] = cultural_counts.get(cult, 0) + 1
 
+    # Helper function to generate filter buttons (avoids f-string backslash issue)
+    def generate_filter_buttons():
+        buttons = []
+        for i in range(6):
+            buttons.append(f'<button class="filter-btn" onclick="filterCards(\'ICC-{i}\')">ICC-{i}</button>')
+        return ' '.join(buttons)
+
     index_html = f"""
 <!DOCTYPE html>
 <html>
@@ -527,7 +534,7 @@ def generate_index_page(narratives: List[NarrativeData], output_dir: Path):
 
         <div class="filters">
             <button class="filter-btn active" onclick="filterCards('all')">All</button>
-            {' '.join(f'<button class="filter-btn" onclick="filterCards(\\'ICC-{i}\\')"">ICC-{i}</button>' for i in range(6))}
+            {generate_filter_buttons()}
         </div>
 
         <div class="grid">
