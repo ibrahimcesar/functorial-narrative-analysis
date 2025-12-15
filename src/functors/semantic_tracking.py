@@ -120,11 +120,70 @@ class CharacterInteractionExtractor:
 
         if self.language == "ru":
             # Russian: Look for capitalized Cyrillic words
-            # Pattern: capital Cyrillic letter followed by lowercase
-            cyrillic_names = re.findall(r'\b([А-ЯЁ][а-яё]{2,})\b', text)
-            # Filter common non-name words
-            ru_stopwords = {'Это', 'Она', 'Что', 'Как', 'Все', 'Они', 'Его', 'Там', 'Тут'}
-            names = {n for n in cyrillic_names if n not in ru_stopwords}
+            # Pattern: capital Cyrillic letter followed by lowercase (min 2 chars after capital)
+            cyrillic_names = re.findall(r'(?<![А-ЯЁа-яё])([А-ЯЁ][а-яё]{2,})(?![а-яё])', text)
+
+            # Extended Russian stopwords - common words that start with capital but aren't names
+            ru_stopwords = {
+                # Pronouns and demonstratives
+                'Это', 'Она', 'Оно', 'Они', 'Его', 'Ему', 'Ней', 'Нем', 'Них',
+                'Что', 'Кто', 'Как', 'Где', 'Там', 'Тут', 'Все', 'Всё', 'Вся',
+                'Эти', 'Эта', 'Этот', 'Той', 'Тот', 'Того', 'Тем', 'Том',
+                # Common sentence starters
+                'Когда', 'Потом', 'После', 'Перед', 'Если', 'Хотя', 'Чтобы',
+                'Потому', 'Поэтому', 'Однако', 'Впрочем', 'Между', 'Теперь',
+                'Вдруг', 'Очень', 'Только', 'Уже', 'Еще', 'Ещё', 'Тогда',
+                'Здесь', 'Сюда', 'Туда', 'Откуда', 'Куда', 'Никто', 'Ничто',
+                'Каждый', 'Каждая', 'Каждое', 'Некто', 'Нечто', 'Кое',
+                # Web/metadata (from lib.ru)
+                'Классика', 'Регистрация', 'Найти', 'Рейтинги', 'Обсуждения',
+                'Новинки', 'Обзоры', 'Помощь', 'Комментарии', 'Год', 'Обновлено',
+                'Статистика', 'Роман', 'Проза', 'Романы', 'Скачать', 'Оценка',
+                'Глава', 'Часть', 'Книга', 'Том', 'Эпилог', 'Пролог',
+                # Misc common words
+                'Может', 'Могут', 'Надо', 'Нужно', 'Хорошо', 'Плохо',
+                'Правда', 'Неправда', 'Конечно', 'Наконец', 'Вообще',
+                'Иногда', 'Всегда', 'Никогда', 'Нельзя', 'Можно',
+                'Много', 'Мало', 'Больше', 'Меньше', 'Лучше', 'Хуже',
+                # More sentence starters and common words
+                'Одни', 'Одна', 'Одно', 'Один', 'Другой', 'Другая', 'Другие',
+                'Либеральная', 'Оказалось', 'Окончив', 'Девочка', 'Мальчик',
+                'Человек', 'Люди', 'Женщина', 'Мужчина', 'Ребенок', 'Дети',
+                'Утром', 'Вечером', 'Ночью', 'Днем', 'Сегодня', 'Завтра', 'Вчера',
+                'Первый', 'Второй', 'Третий', 'Последний', 'Следующий',
+                'Почему', 'Зачем', 'Отчего', 'Почем', 'Разве', 'Неужели',
+            }
+
+            # Count occurrences - names appear multiple times
+            name_counts = Counter(cyrillic_names)
+
+            # Keep names that appear at least twice and aren't stopwords
+            names = {n for n, count in name_counts.items()
+                    if count >= 2 and n not in ru_stopwords and len(n) >= 3}
+
+            # Also extract names from dialogue patterns
+            # Pattern: -- Имя, or сказал(а) Имя, or Имя сказал(а)
+            for verb in self.dialogue_verbs:
+                # "сказал Иван" pattern
+                pattern = rf'{verb}\s+([А-ЯЁ][а-яё]{{2,}})'
+                for match in re.finditer(pattern, text):
+                    name = match.group(1)
+                    if name not in ru_stopwords:
+                        names.add(name)
+                # "Иван сказал" pattern
+                pattern = rf'([А-ЯЁ][а-яё]{{2,}})\s+{verb}'
+                for match in re.finditer(pattern, text):
+                    name = match.group(1)
+                    if name not in ru_stopwords:
+                        names.add(name)
+
+            # Russian dialogue marker pattern: "-- говорит Анна" or after em-dash
+            dash_pattern = r'[—–-]\s*([А-ЯЁ][а-яё]{2,})\s+(?:сказал|говорит|ответил|спросил)'
+            for match in re.finditer(dash_pattern, text):
+                name = match.group(1)
+                if name not in ru_stopwords:
+                    names.add(name)
+
         else:
             # English: Look for capitalized words
             # Title patterns
@@ -324,6 +383,11 @@ class CharacterInteractionFunctor(BaseFunctor):
         # Reset global tracking
         self._global_interactions = defaultdict(float)
         self._known_characters = set()
+
+        # IMPORTANT: Pre-scan all windows to build character list
+        # This ensures we find characters that appear across the full text
+        full_text = ' '.join(windows)
+        self._known_characters = self.extractor.extract_character_names(full_text)
 
         scores = []
         window_metadata = []
