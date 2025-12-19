@@ -6,6 +6,21 @@ This directory contains detailed documentation for the Functorial Narrative Anal
 
 ## Documents
 
+### For Writers and Readers
+
+| Document | Description |
+|----------|-------------|
+| [insights_for_writers_and_readers.md](insights_for_writers_and_readers.md) | **Start here** — Practical insights on how stories actually work, based on computational analysis |
+
+### Research Findings
+
+| Document | Description |
+|----------|-------------|
+| [falsifiability.md](falsifiability.md) | Falsifiability analysis of narrative models — why traditional models fail scientific standards |
+| [icc_model.md](icc_model.md) | Information Complexity Classes (ICC) — a data-driven classification system |
+| [research_milestone_compound_icc.md](research_milestone_compound_icc.md) | Discovery of compound sentiment and c-ICC model |
+| [article_falsifiability_icc.md](article_falsifiability_icc.md) | Full article: "The Emperor Has No Clothes" |
+
 ### Core Modules
 
 | Document | Description |
